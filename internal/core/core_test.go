@@ -179,3 +179,20 @@ func TestCauseRemovesCredentialBeforeTruncation(t *testing.T) {
 		}
 	}
 }
+
+func TestCauseRemovesCredentialAfterWhitespaceCollapse(t *testing.T) {
+	secret := "custom-credential-value-0123"
+	r := &Runtime{Env: pluginapi.Env{Credentials: pluginapi.Credentials{"bot_token": secret}}}
+	for _, n := range []int{65526, 65530, 65536, 1 << 20, (1 << 20) - 10} {
+		e := Guard(context.Background(), time.Second, func(context.Context) error { return errors.New(strings.Repeat(" ", n) + secret + " tail") })
+		got := r.Cause(e)
+		for k := 6; k <= len(secret); k++ {
+			if strings.Contains(got, secret[:k]) {
+				t.Fatalf("pad %d leaked %q in %q", n, secret[:k], got)
+			}
+		}
+		if !strings.HasPrefix(got, "plugin failure") {
+			t.Fatalf("pad %d: %q", n, got)
+		}
+	}
+}

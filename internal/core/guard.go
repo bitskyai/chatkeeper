@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"runtime"
 	"time"
@@ -15,7 +16,7 @@ var ErrPlugin = errors.New("plugin failure")
 // PluginError contains a plugin's error: errors.Is(err, ErrPlugin) holds, the
 // original value is dropped (so it cannot impersonate core sentinels such as
 // ErrTimeout), and only a redacted, bounded description of its cause is shown.
-// detail keeps the cause before truncation (bounded by maxDetail) so a caller
+// detail keeps the whole untruncated cause so a caller
 // that knows the workspace credentials can remove them before Redact truncates;
 // otherwise a credential crossing the truncation boundary would leak its prefix.
 // It is never rendered except through pluginapi.Redact.
@@ -24,9 +25,11 @@ type PluginError struct {
 	detail string
 }
 
-// maxDetail bounds the retained raw cause; far above pluginapi.MaxErrorDetail,
-// so anything it cuts is also cut by the final truncation.
-const maxDetail = 64 << 10
+// maxDetail bounds the retained raw cause. A cause over the bound is never
+// truncated (truncation before credential removal can leak a credential's
+// prefix, and whitespace collapsing or redaction can pull the cut point into the
+// visible window); it is replaced by a size-only description instead.
+const maxDetail = 1 << 20
 
 func (e *PluginError) Error() string {
 	if e.Cause == "" {
@@ -48,7 +51,7 @@ func Contain(e error) error {
 	}
 	raw := e.Error()
 	if len(raw) > maxDetail {
-		raw = raw[:maxDetail]
+		return &PluginError{Cause: fmt.Sprintf("error message too large to show (%d bytes)", len(raw))}
 	}
 	return &PluginError{Cause: pluginapi.Redact(raw), detail: raw}
 }
