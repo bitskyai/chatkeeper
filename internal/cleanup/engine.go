@@ -121,12 +121,18 @@ func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d plugin
 				}
 				approved := false
 				for _, old := range expected.Threads {
-					if old.Channel == k.Channel && old.RootTS == k.RootTS && old.Proof == fresh.Proof && old.Status == "dry-run" && fresh.Status == "dry-run" {
+					if old.Channel == k.Channel && old.RootTS == k.RootTS && old.Proof == fresh.Proof && old.Status == fresh.Status && (fresh.Status == "dry-run" || fresh.Status == "cleaned") {
 						approved = true
 					}
 				}
 				if !approved {
 					return errors.New("preview changed; preview again")
+				}
+				if fresh.Status == "cleaned" {
+					// This verified preview is already complete. Do not read again:
+					// a concurrent refresh could add unapproved deletion targets.
+					t = fresh
+					return nil
 				}
 			}
 			return runThread(ctx, w, k, v, d, apply, &t)

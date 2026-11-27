@@ -538,3 +538,104 @@ func TestConfirmedReceiptsSurviveStaleCapture(t *testing.T) {
 		t.Fatal("confirmed receipts lost during rebase", r, d.calls)
 	}
 }
+
+func TestApplyBoundAlreadyCleanedIsNoop(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	d := &driver{}
+	first := ApplyBound(ctx, w, s, d, Run(ctx, w, s, nil, false))
+	if first.Threads[0].Status != "deleted" || len(d.calls) != 3 {
+		t.Fatalf("initial apply: %+v, calls %v", first, d.calls)
+	}
+	preview := Run(ctx, w, s, nil, false)
+	if preview.Threads[0].Status != "cleaned" {
+		t.Fatalf("completed preview: %+v", preview)
+	}
+	// A completed journal must succeed without any source driver at all.
+	result := ApplyBound(ctx, w, s, nil, preview)
+	if result.Threads[0].Status != "cleaned" || result.Threads[0].Reason != "" {
+		t.Fatalf("completed apply should be a no-op: %+v", result)
+	}
+	for _, message := range result.Threads[0].Results {
+		if message.Status != "deleted" {
+			t.Fatalf("lost deletion receipt: %+v", message)
+		}
+	}
+}
+
+func TestApplyBoundCleanedPreviewCannotAuthorizeNewDeletions(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	preview := Run(ctx, w, s, nil, false)
+	preview.Threads[0].Status = "cleaned"
+	d := &driver{}
+	result := ApplyBound(ctx, w, s, d, preview)
+	if len(d.calls) != 0 || result.Threads[0].Status != "blocked" {
+		t.Fatalf("cleaned approval authorized an uncleaned archive: %+v, calls %v", result, d.calls)
+	}
+}
+
+type refreshBoundaryPlugin struct {
+	pluginapi.Plugin
+	id      string
+	refresh func()
+}
+
+func (p *refreshBoundaryPlugin) Manifest() pluginapi.Manifest {
+	return pluginapi.Manifest{ID: p.id, Name: p.id, Version: "1", APIVersion: 1}
+}
+
+func (p *refreshBoundaryPlugin) CleanupBoundary(pluginapi.Workspace, pluginapi.ArchiveManifest) string {
+	if p.refresh != nil {
+		refresh := p.refresh
+		p.refresh = nil
+		refresh()
+	}
+	return ""
+}
+
+func TestApplyBoundCleanedPreviewCannotDeleteConcurrentReply(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	p := &refreshBoundaryPlugin{id: fmt.Sprintf("noop_%x", time.Now().UnixNano())}
+	pluginapi.Register(p)
+	w.Platform = p.id
+	before, err := s.Read(ctx, k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before.Manifest.Platform = p.id
+	before.Documents = nil
+	if _, err := s.Save(ctx, k, *before); err != nil {
+		t.Fatal(err)
+	}
+	d := &driver{}
+	if result := Run(ctx, w, s, d, true); result.Threads[0].Status != "deleted" {
+		t.Fatal(result)
+	}
+	preview := Run(ctx, w, s, nil, false)
+	if preview.Threads[0].Status != "cleaned" {
+		t.Fatal(preview)
+	}
+	d.calls = nil
+	// Boundary validation runs after the snapshot read, outside archive locks.
+	// Capture can publish a new reply while this cleaned snapshot is validated.
+	p.refresh = func() {
+		fresh := *before
+		fresh.Documents = nil
+		fresh.Manifest.Schema = 2
+		fresh.Messages = []pluginapi.Message{{"ts": k.RootTS, "user": "UOWN", "text": "root", "reply_count": 1, "reactions": before.Messages[0]["reactions"]}, {"ts": "1000000003.000001", "thread_ts": k.RootTS, "user": "UOWN", "text": "unapproved new reply"}}
+		fresh.Manifest.MessageCount = len(fresh.Messages)
+		if _, err := s.Save(ctx, k, fresh); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result := ApplyBound(ctx, w, s, d, preview)
+	if result.Threads[0].Status != "cleaned" || len(d.calls) != 0 {
+		t.Fatalf("cleaned approval deleted concurrent activity: %+v, calls %v", result, d.calls)
+	}
+	if next := Run(ctx, w, s, nil, false); next.Threads[0].Status != "dry-run" {
+		t.Fatalf("new reply must require fresh approval: %+v", next)
+	}
+}
