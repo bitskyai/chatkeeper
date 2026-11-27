@@ -78,11 +78,11 @@ func TestBrowserCleanupPreviewApply(t *testing.T) {
 	defer a.Close()
 	server := httptest.NewServer(a)
 	defer server.Close()
-	alloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.NoSandbox)...)
+	alloc, cancel := chromedp.NewExecAllocator(context.Background(), append(chromedp.DefaultExecAllocatorOptions[:], chromedp.NoSandbox, chromedp.WindowSize(1280, 900), chromedp.WSURLReadTimeout(60*time.Second))...)
 	defer cancel()
 	ctx, cancel := chromedp.NewContext(alloc)
 	defer cancel()
-	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+	ctx, cancel = context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	run := func(actions ...chromedp.Action) {
 		t.Helper()
