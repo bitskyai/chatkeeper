@@ -61,6 +61,13 @@ func (a *App) runScheduledCleanup(ctx context.Context, now time.Time) {
 }
 func (a *App) applyScheduled(ctx context.Context, entry config.Entry) {
 	ws := entry.Workspace
+	resume, err := a.Manager.SuspendCapture(ws.ID)
+	if err != nil {
+		report, _ := json.Marshal(cleanup.Report{Workspace: ws.ID, Reason: "Automatic cleanup: cannot suspend capture"})
+		_, _ = a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) VALUES(?,unixepoch(),?,'complete')", ws.ID, string(report))
+		return
+	}
+	defer resume()
 	start, _ := json.Marshal(cleanup.Report{Workspace: ws.ID, Reason: "Starting automatic cleanup"})
 	result, e := a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) VALUES(?,unixepoch(),?,'running')", ws.ID, string(start))
 	if e != nil {

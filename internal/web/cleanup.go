@@ -147,8 +147,16 @@ func (a *App) cleanupPage(w http.ResponseWriter, r *http.Request, session, csrf 
 				a.cleanupJobs.Add(1)
 				go func() {
 					defer a.cleanupJobs.Done()
+					report := cleanup.Report{Workspace: id, Reason: "Cannot suspend capture for cleanup"}
+					resume, err := a.Manager.SuspendCapture(id)
+					if err != nil {
+						b, _ := json.Marshal(report)
+						_, _ = a.db.Exec("UPDATE cleanup_runs SET report=?,status='complete' WHERE id=?", string(b), runID)
+						return
+					}
+					defer resume()
 					store, err := storage.Open(ws.Storage)
-					report := cleanup.Report{Workspace: id, Reason: "Archive unavailable"}
+					report.Reason = "Archive unavailable"
 					if err == nil {
 						defer store.Close()
 						report = cleanup.ApplyBoundProgress(a.ctx, ws, store, d, approved, func(progress cleanup.Report) {

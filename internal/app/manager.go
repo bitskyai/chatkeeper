@@ -46,13 +46,14 @@ type Manager struct {
 	closed     bool
 	OnCapture  func(string, pluginapi.Key)
 	Search     *search.Service
+	suspended  map[string]int
 	paused     map[string]bool
 	watched    [2]os.FileInfo
 	retry      bool
 }
 
 func New(ctx context.Context, path string, secrets SecretResolver, client *http.Client) *Manager {
-	return &Manager{ctx: ctx, Path: path, Secrets: secrets, HTTP: client, running: map[string]*Running{}, paused: map[string]bool{}}
+	return &Manager{ctx: ctx, Path: path, Secrets: secrets, HTTP: client, running: map[string]*Running{}, paused: map[string]bool{}, suspended: map[string]int{}}
 }
 func (m *Manager) Generation() int { m.mu.Lock(); defer m.mu.Unlock(); return m.generation }
 func (m *Manager) List() []*Running {
@@ -130,7 +131,7 @@ func (m *Manager) reload() error {
 			W pluginapi.Workspace
 			C map[string]string
 			P bool
-		}{entry.Workspace, entry.Credentials, m.paused[entry.Workspace.ID]})
+		}{entry.Workspace, entry.Credentials, (m.paused[entry.Workspace.ID] || m.suspended[entry.Workspace.ID] > 0)})
 		fp := sha256.Sum256(b)
 		if prior := current[entry.Workspace.ID]; prior != nil && prior.fingerprint == fp {
 			next[entry.Workspace.ID] = prior
@@ -144,7 +145,7 @@ func (m *Manager) reload() error {
 			m.setError("Cannot open archive; running configuration retained")
 			return errors.New("cannot open archive")
 		}
-		r := &Running{Entry: entry, Store: store, cancel: func() {}, done: make(chan struct{}), fingerprint: fp, Paused: m.paused[entry.Workspace.ID]}
+		r := &Running{Entry: entry, Store: store, cancel: func() {}, done: make(chan struct{}), fingerprint: fp, Paused: (m.paused[entry.Workspace.ID] || m.suspended[entry.Workspace.ID] > 0)}
 		r.Runtime = core.New(entry.Workspace, entry.Plugin, pluginapi.Env{Credentials: entry.Credentials, HTTP: m.HTTP}, store)
 		wid := entry.Workspace.ID
 		r.Runtime.OnArchive = func(k pluginapi.Key) {
@@ -277,6 +278,45 @@ func (m *Manager) SetAllPaused(paused bool, persist func(ids []string) error) er
 	return nil
 }
 
+// SuspendCapture drains this workspace's capture runtime before source deletion.
+// Leases nest independently of the user's pause choice. No manager or archive
+// lock is held while the caller performs network work.
+func (m *Manager) SuspendCapture(id string) (func(), error) {
+	m.reloadMu.Lock()
+	m.suspended[id]++
+	m.mu.Lock()
+	active := m.running[id] != nil
+	m.mu.Unlock()
+	var err error
+	if active {
+		err = m.reload()
+	}
+	if err != nil {
+		m.suspended[id]--
+		m.reloadMu.Unlock()
+		return nil, err
+	}
+	m.reloadMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.reloadMu.Lock()
+			defer m.reloadMu.Unlock()
+			m.suspended[id]--
+			m.mu.Lock()
+			active := m.running[id] != nil && !m.closed
+			m.mu.Unlock()
+			if !active {
+				return
+			}
+			if err := m.reload(); err != nil {
+				m.retry = true
+				slog.Warn("capture resume failed; configuration reload will retry", "workspace", id)
+			}
+		})
+	}, nil
+}
+
 func (m *Manager) SetPaused(id string, paused bool) {
 	m.reloadMu.Lock()
 	defer m.reloadMu.Unlock()
@@ -338,5 +378,5 @@ func (m *Manager) Read(serve func()) { m.readMu.RLock(); defer m.readMu.RUnlock(
 func (m *Manager) IsPaused(id string) bool {
 	m.reloadMu.Lock()
 	defer m.reloadMu.Unlock()
-	return m.paused[id]
+	return m.paused[id] || m.suspended[id] > 0
 }

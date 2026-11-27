@@ -183,3 +183,83 @@ func TestWatcherDoesNotReadUnchangedSecrets(t *testing.T) {
 		t.Fatal("unchanged watcher read credentials", s.reads.Load()-before)
 	}
 }
+
+func TestCaptureSuspensionPreservesNestedAndUserPause(t *testing.T) {
+	home := t.TempDir()
+	p := filepath.Join(home, "config.yaml")
+	data := fmt.Sprintf("workspaces:\n- id: fixture\n  platform: slack\n  team_id: TFIXTURE\n  bot_token_env: SYNTHETIC_BOT\n  storage: {path: %q}\n", filepath.Join(home, "archive"))
+	if e := os.WriteFile(p, []byte(data), 0600); e != nil {
+		t.Fatal(e)
+	}
+	fake := slacktest.New(t)
+	m := app.New(context.Background(), p, &countedSecrets{}, fake.Client())
+	defer m.Close()
+	if e := m.Reload(); e != nil {
+		t.Fatal(e)
+	}
+	before := m.List()[0]
+	resume1, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !m.List()[0].Paused {
+		t.Fatal("capture still running during cleanup")
+	}
+	if m.List()[0].Runtime == before.Runtime {
+		t.Fatal("capture runtime was not drained")
+	}
+	resume2, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	resume1()
+	resume1()
+	if !m.List()[0].Paused {
+		t.Fatal("nested cleanup resumed capture early")
+	}
+	m.SetPaused("fixture", true)
+	resume2()
+	if !m.List()[0].Paused {
+		t.Fatal("cleanup erased explicit user pause")
+	}
+	if e := m.Pause("fixture"); e != nil {
+		t.Fatal(e)
+	}
+	if m.List()[0].Paused {
+		t.Fatal("user could not resume after cleanup")
+	}
+	resume3, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	resume3()
+	if m.List()[0].Paused {
+		t.Fatal("cleanup did not restore active capture")
+	}
+}
+
+func TestCaptureSuspensionBeforeRuntimeStarts(t *testing.T) {
+	home := t.TempDir()
+	p := filepath.Join(home, "config.yaml")
+	data := fmt.Sprintf("workspaces:\n- id: fixture\n  platform: slack\n  team_id: TFIXTURE\n  bot_token_env: SYNTHETIC_BOT\n  storage: {path: %q}\n", filepath.Join(home, "archive"))
+	if e := os.WriteFile(p, []byte(data), 0600); e != nil {
+		t.Fatal(e)
+	}
+	fake := slacktest.New(t)
+	m := app.New(context.Background(), p, &countedSecrets{}, fake.Client())
+	defer m.Close()
+	resume, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e := m.Reload(); e != nil {
+		t.Fatal(e)
+	}
+	if !m.List()[0].Paused {
+		t.Fatal("startup bypassed active cleanup lease")
+	}
+	resume()
+	if m.List()[0].Paused {
+		t.Fatal("startup remained paused after cleanup")
+	}
+}
