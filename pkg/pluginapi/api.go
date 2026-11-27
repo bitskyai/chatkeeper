@@ -315,6 +315,16 @@ type SetupStep struct {
 	Skip, SkipNote        string
 }
 
+// AgentSetup is an optional Plugin extension that lets a coding agent run
+// setup. SetupManifest returns the platform's app manifest (the single source
+// for the wizard's create link and "chatkeeper setup <id> --print-manifest").
+// AgentPrompt is a copyable prompt the wizard shows; it must not contain
+// credentials. Steps the platform cannot automate stay human clicks.
+type AgentSetup interface {
+	SetupManifest() string
+	AgentPrompt() string
+}
+
 var registry = struct {
 	sync.RWMutex
 	plugins map[string]Plugin

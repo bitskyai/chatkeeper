@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"embed"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -111,6 +110,8 @@ type page struct {
 	Messages                                                     []string
 	Links                                                        []pluginapi.Link
 	Copy                                                         []copyItem
+	BodyParts                                                    []bodyPart
+	Agent                                                        string
 	StepID                                                       string
 	Fields                                                       []field
 	Cards                                                        []card
@@ -720,8 +721,10 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request, id, csrf string) {
 				e = z.merge(result.Data)
 				if e == nil {
 					z.Step++
+					// The next page shows only this step's one-line summary; its
+					// itemized checks belong to the step that ran them.
 					z.Messages = result.Messages
-					z.Checks = result.Checks
+					z.Checks = nil
 					a.persist(id, z)
 					http.Redirect(w, r, "/setup/step", http.StatusSeeOther)
 					return
@@ -744,10 +747,13 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request, id, csrf string) {
 		if e == nil {
 			e = prepareErr
 		}
-		pg := page{Title: step.Title, Kind: "step", Body: step.Body, CSRF: csrf, Step: z.Step + 1, Steps: len(steps) + 2, Links: mergeLinks(step.Links, prepared.Links, result.Links), Copy: copyItems(step.Copy), Fields: schemaFields(step.Schema), CanBack: z.Step > 0, Skip: step.Skip, CanTest: step.Test != nil}
+		parts, copies := stepBody(step.Body, step.Copy)
+		pg := page{Title: step.Title, Kind: "step", Body: step.Body, BodyParts: parts, CSRF: csrf, Step: z.Step + 1, Steps: len(steps) + 2, Links: mergeLinks(step.Links, prepared.Links, result.Links), Copy: copies, Fields: schemaFields(step.Schema), CanBack: z.Step > 0, Skip: step.Skip, CanTest: step.Test != nil}
 		if r.Method == "GET" {
 			pg.Messages = append(pg.Messages, z.Messages...)
-			pg.Checks = z.Checks
+		}
+		if agent, ok := p.(pluginapi.AgentSetup); ok && z.Step == 0 {
+			pg.Agent = agent.AgentPrompt()
 		}
 		pg.Messages = append(pg.Messages, prepared.Messages...)
 		pg.Messages = append(pg.Messages, result.Messages...)
@@ -947,12 +953,7 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 	if locked {
 		wid = z.Workspace
 	}
-	root := filepath.Join(a.opts.Home, "data")
-	if a.opts.Mode == "desktop" {
-		if home, e := os.UserHomeDir(); e == nil {
-			root = filepath.Join(home, "ChatKeeper")
-		}
-	}
+	root := StorageRoot(a.opts.Home, a.opts.Mode)
 	storagePath := r.FormValue("storage")
 	if storagePath == "" {
 		storagePath = filepath.Join(root, wid)
@@ -979,21 +980,9 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 		} else if a.opts.Mode == "server" && !confined(root, storagePath) {
 			pg.Error = "Choose a folder inside the server data root."
 		} else {
-			entry := map[string]any{"id": wid, "platform": z.Platform, "storage": map[string]any{"type": "folder", "path": storagePath}}
-			for k, v := range z.Data {
-				var value any
-				_ = json.Unmarshal(v, &value)
-				entry[k] = value
-			}
-			for _, f := range schemaFields(p.CredentialSchema()) {
-				name := "CHATKEEPER_" + strings.ToUpper(hex.EncodeToString([]byte(wid))) + "_" + strings.ToUpper(f.Name)
-				if z.References[f.Name] != "" {
-					name = z.References[f.Name]
-				}
-				entry[f.Name+"_env"] = name
-			}
-			b, _ := json.Marshal(entry)
-			if _, e := p.ParseWorkspace(r.Context(), b, z.Credentials); e != nil {
+			draft := Draft{ID: wid, Storage: storagePath, Data: z.Data, Credentials: z.Credentials, References: z.References}
+			entry, e := BuildEntry(r.Context(), p, draft)
+			if e != nil {
 				pg.Error = "Workspace settings are invalid. Restart setup and validate the connection."
 			} else {
 				yamlBytes, _ := json.MarshalIndent(entry, "", "  ")
@@ -1001,43 +990,7 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 				if pg.Managed {
 					pg.Error = "Configuration is managed. Apply this workspace in your YAML configuration; credentials must be supplied separately."
 				} else {
-					var e error
-					known := map[string]bool{}
-					for _, f := range schemaFields(p.CredentialSchema()) {
-						known[f.Name] = true
-					}
-					for k, v := range z.Credentials {
-						if v != "" && !known[k] {
-							e = errors.New("unknown credential")
-						}
-					}
-					for _, f := range schemaFields(p.CredentialSchema()) {
-						if e != nil {
-							break
-						}
-						k := f.Name
-						if z.References[k] != "" {
-							continue
-						}
-						name, ok := entry[k+"_env"].(string)
-						if !ok || name == "" {
-							e = errors.New("missing credential reference")
-							break
-						}
-						v := z.Credentials[k]
-						if v == "" {
-							// A skipped optional token clears any value saved earlier in this wizard.
-							if old, _, _ := a.Secrets.Get(name); old == "" {
-								continue
-							}
-						}
-						if e = a.Secrets.Set(name, v); e != nil {
-							break
-						}
-					}
-					if e == nil {
-						e = a.validateAndWrite(wid, entry)
-					}
+					e := SaveEntry(a.opts.Config, a.Secrets, p, draft, entry)
 					if e == nil {
 						e = a.Manager.Reload()
 					}
@@ -1060,11 +1013,11 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 	}
 	a.render(w, pg)
 }
-func (a *App) validateAndWrite(id string, entry map[string]any) error {
-	return config.UpdateValidated(a.opts.Config, id, entry, func(path string) error {
+func validateAndWrite(configPath string, store *secrets.Store, id string, entry map[string]any) error {
+	return config.UpdateValidated(configPath, id, entry, func(path string) error {
 		var resolveErr error
 		_, err := config.LoadWithResolver(path, true, func(k string) string {
-			v, _, e := a.Secrets.Get(k)
+			v, _, e := store.Get(k)
 			if e != nil {
 				resolveErr = e
 			}

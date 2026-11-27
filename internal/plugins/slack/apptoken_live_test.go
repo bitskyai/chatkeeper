@@ -4,6 +4,7 @@ package slack_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
@@ -36,7 +37,15 @@ func TestRealAppTokenGuide(t *testing.T) {
 	if e != nil || len(prep.Links) != 2 || !strings.HasSuffix(prep.Links[0].URL, "/general") {
 		t.Fatal("app id not resolved from the bot token")
 	}
-	linked := strings.TrimSuffix(strings.TrimPrefix(prep.Links[0].URL, "https://api.slack.com/apps/"), "/general")
+	// https://app.slack.com/app-settings/<team>/<app>/general
+	parts := strings.Split(strings.TrimPrefix(prep.Links[0].URL, "https://app.slack.com/app-settings/"), "/")
+	if len(parts) != 3 || parts[2] != "general" || !strings.HasPrefix(parts[0], "T") || prep.Links[1].URL != "https://app.slack.com/app-settings/"+parts[0]+"/"+parts[1]+"/socket-mode" {
+		t.Fatal("deep link shape")
+	}
+	linked := parts[1]
+	if bot := step0(t, env); bot.team != parts[0] {
+		t.Fatal("deep link team differs from the bot token's workspace")
+	}
 	res, e := step.Test(ctx, nil, nil, env)
 	if e != nil || !res.OK {
 		t.Fatal("real app-level token rejected", res.Messages)
@@ -61,4 +70,24 @@ func TestRealAppTokenGuide(t *testing.T) {
 	if res, _ := step.Test(ctx, nil, nil, env); res.OK || res.FieldErrors["app_token"] == "" {
 		t.Fatal("bot token pasted as app token not caught")
 	}
+}
+
+type botIDs struct{ team string }
+
+// step0 runs the bot token step and reads the team id it saves.
+func step0(t *testing.T, env pluginapi.Env) botIDs {
+	for _, s := range (slack.Plugin{}).SetupFlow() {
+		if s.ID == "bot_token" {
+			res, e := s.Run(context.Background(), nil, nil, env)
+			if e != nil || !res.OK {
+				t.Fatal("bot token rejected")
+			}
+			var v struct {
+				Team string `json:"team_id"`
+			}
+			_ = json.Unmarshal(res.Data, &v)
+			return botIDs{v.Team}
+		}
+	}
+	return botIDs{}
 }

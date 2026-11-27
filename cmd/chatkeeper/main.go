@@ -50,6 +50,9 @@ func execute(args []string, out io.Writer) error {
 		command = args[0]
 		args = args[1:]
 	}
+	if command == "setup" {
+		return setupCommand(appHome(), args, out)
+	}
 	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
 		printUsage(out)
 		return nil
@@ -60,6 +63,7 @@ func execute(args []string, out io.Writer) error {
 	if command == "cleanup" {
 		return cleanupCommand(args, out)
 	}
+
 	if command == "healthcheck" {
 		return healthcheck(args)
 	}
@@ -76,15 +80,11 @@ func execute(args []string, out io.Writer) error {
 	switch command {
 	case "run", "check-config", "backfill", "verify", "mcp":
 	default:
-		return errors.New("usage: chatkeeper run|check-config|backfill|verify|cleanup|mcp|version|healthcheck")
+		return errors.New("usage: chatkeeper run|check-config|backfill|verify|setup|cleanup|mcp|version|healthcheck")
 	}
-	home := os.Getenv("CHATKEEPER_HOME")
+	home := appHome()
 	if home == "" {
-		dir, e := os.UserConfigDir()
-		if e != nil {
-			return errors.New("cannot locate application home")
-		}
-		home = filepath.Join(dir, "chatkeeper")
+		return errors.New("cannot locate application home")
 	}
 	if command == "run" || command == "backfill" {
 		level := slog.LevelInfo
@@ -154,7 +154,15 @@ func execute(args []string, out io.Writer) error {
 		if e := service.Configure(ctx, sources); e != nil {
 			return e
 		}
-		return archiveMCP.New(service).Run(ctx, &sdk.StdioTransport{})
+		server := archiveMCP.New(service)
+		store := &secrets.Store{Home: home, Desktop: web.ConfiguredMode(*mode, "127.0.0.1") == "desktop"}
+		archiveMCP.AddSetup(server, archiveMCP.SetupTools{
+			Status: func(context.Context) (any, error) { return web.SetupStatus(*name, store) },
+			Validate: func(ctx context.Context, workspace string) (any, error) {
+				return web.ValidateWorkspace(ctx, *name, store, workspace, setupHTTP)
+			},
+		})
+		return server.Run(ctx, &sdk.StdioTransport{})
 	}
 
 	secretStore := &secrets.Store{Home: home, Desktop: web.ConfiguredMode(*mode, "127.0.0.1") == "desktop"}
@@ -279,6 +287,18 @@ func execute(args []string, out io.Writer) error {
 	return nil
 }
 
+// appHome is CHATKEEPER_HOME or the per-user config folder ("" if unknown).
+func appHome() string {
+	if home := os.Getenv("CHATKEEPER_HOME"); home != "" {
+		return home
+	}
+	dir, e := os.UserConfigDir()
+	if e != nil {
+		return ""
+	}
+	return filepath.Join(dir, "chatkeeper")
+}
+
 func printUsage(out io.Writer) {
 	fmt.Fprint(out, `Usage: chatkeeper [command] [flags]
 
@@ -287,6 +307,8 @@ Commands:
   check-config  Validate configuration (--offline skips credentials)
   backfill      Capture matching threads once
   verify        Verify archive contents without source calls
+  setup         Non-interactive setup for scripts and coding agents
+                (setup PLATFORM --help; --print-manifest; --dry-run)
   cleanup       Preview cleanup (--workspace X; --apply enables source deletion)
   mcp           Serve read-only MCP over stdio
   healthcheck   GET /healthz; exit 0 when healthy, 1 on failure

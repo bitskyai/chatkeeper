@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/url"
@@ -19,6 +20,55 @@ import (
 type copyItem struct {
 	Label, Value string
 	Block        bool
+}
+
+// bodyPart is a run of step text; Copy parts render as code with a copy button.
+type bodyPart struct {
+	Text, ID string
+	Copy     bool
+}
+
+// stepBody renders backticked values in body that match a Copy entry inline
+// with a copy button and returns the entries left for the copy list.
+func stepBody(body string, copies []pluginapi.CopyText) ([]bodyPart, []copyItem) {
+	values := map[string]bool{}
+	for _, c := range copies {
+		if !strings.Contains(c.Value, "\n") {
+			values[c.Value] = true
+		}
+	}
+	parts, used := []bodyPart{}, map[string]bool{}
+	rest := body
+	for {
+		open := strings.Index(rest, "`")
+		if open < 0 {
+			break
+		}
+		end := strings.Index(rest[open+1:], "`")
+		if end < 0 {
+			break
+		}
+		value := rest[open+1 : open+1+end]
+		if !values[value] {
+			parts = append(parts, bodyPart{Text: rest[:open+2+end]})
+			rest = rest[open+2+end:]
+			continue
+		}
+		parts = append(parts, bodyPart{Text: rest[:open]}, bodyPart{Text: value, Copy: true, ID: fmt.Sprintf("inline-%d", len(used))})
+		used[value] = true
+		rest = rest[open+2+end:]
+	}
+	parts = append(parts, bodyPart{Text: rest})
+	left := []pluginapi.CopyText{}
+	for _, c := range copies {
+		if !used[c.Value] {
+			left = append(left, c)
+		}
+	}
+	if len(used) == 0 {
+		parts = nil
+	}
+	return parts, copyItems(left)
 }
 
 func copyItems(in []pluginapi.CopyText) []copyItem {
@@ -176,7 +226,8 @@ func (a *App) upgrade(w http.ResponseWriter, r *http.Request, csrf string) {
 		env := pluginapi.Env{Credentials: maps.Clone(creds), HTTP: a.opts.HTTP}
 		prepared, _ = core.Call(r.Context(), 30*time.Second, func(ctx context.Context) (pluginapi.StepResult, error) { return step.Prepare(ctx, st, env) })
 	}
-	pg := page{Title: step.Title, Kind: "upgrade", Body: step.Body, CSRF: csrf, Workspace: wid, StepID: step.ID, Links: mergeLinks(step.Links, prepared.Links, result.Links), Copy: copyItems(step.Copy), Fields: secretFields(step.Schema), CanTest: step.Test != nil, Checks: result.Checks, Tested: tested}
+	parts, copies := stepBody(step.Body, step.Copy)
+	pg := page{BodyParts: parts, Copy: copies, Title: step.Title, Kind: "upgrade", Body: step.Body, CSRF: csrf, Workspace: wid, StepID: step.ID, Links: mergeLinks(step.Links, prepared.Links, result.Links), Fields: secretFields(step.Schema), CanTest: step.Test != nil, Checks: result.Checks, Tested: tested}
 	pg.Messages = append(append(pg.Messages, prepared.Messages...), result.Messages...)
 	for k, msg := range result.FieldErrors {
 		pg.Messages = append(pg.Messages, k+": "+msg)

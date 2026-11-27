@@ -76,8 +76,8 @@ func TestAppTokenGuidanceAndSocketTest(t *testing.T) {
 	if app.Skip == "" || !strings.Contains(app.Body, "App-Level Tokens") || !strings.Contains(app.Body, "connections:write") {
 		t.Fatal("app token step lacks guidance or polling fallback", app)
 	}
-	prep, e := app.Prepare(context.Background(), pluginapi.SetupState{"app_id": json.RawMessage(`"AFIXTURE"`)}, pluginapi.Env{})
-	if e != nil || len(prep.Links) == 0 || prep.Links[0].URL != "https://api.slack.com/apps/AFIXTURE/general" {
+	prep, e := app.Prepare(context.Background(), pluginapi.SetupState{"team_id": json.RawMessage(`"TFIXTURE"`), "app_id": json.RawMessage(`"AFIXTURE"`)}, pluginapi.Env{})
+	if e != nil || len(prep.Links) == 0 || prep.Links[0].URL != "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/general" {
 		t.Fatal("deep link", prep, e)
 	}
 	env := pluginapi.Env{Credentials: pluginapi.Credentials{"bot_token": "xoxb-synthetic"}, HTTP: f.Client()}
@@ -146,7 +146,7 @@ func TestAppTokenSameAppAndFixes(t *testing.T) {
 	env := pluginapi.Env{Credentials: pluginapi.Credentials{"bot_token": "xoxb-synthetic", "app_token": secret}, HTTP: f.Client()}
 	// Without saved state the app id comes from auth.test -> bots.info.
 	prep, _ := app.Prepare(context.Background(), nil, env)
-	if len(prep.Links) != 2 || prep.Links[0].URL != "https://api.slack.com/apps/AFIXTURE/general" || prep.Links[1].URL != "https://api.slack.com/apps/AFIXTURE/socket-mode" {
+	if len(prep.Links) != 2 || prep.Links[0].URL != "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/general" || prep.Links[1].URL != "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/socket-mode" {
 		t.Fatal("deep links", prep.Links)
 	}
 	f.Overrides["bots.info"] = func(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +180,7 @@ func TestAppTokenSameAppAndFixes(t *testing.T) {
 		if e != nil || res.OK || !strings.Contains(text, c.want) {
 			t.Fatal(c.body, text, e)
 		}
-		if len(res.Links) != 2 || res.Links[0].URL != "https://api.slack.com/apps/AFIXTURE/general" {
+		if len(res.Links) != 2 || res.Links[0].URL != "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/general" {
 			t.Fatal("failure must link the fix", res.Links)
 		}
 		if b, _ := json.Marshal(res); strings.Contains(string(b), secret) {
@@ -206,5 +206,63 @@ func TestCreateAppLinkCarriesManifest(t *testing.T) {
 		if !strings.Contains(slack.AppManifest, want) {
 			t.Fatal("manifest lacks", want)
 		}
+	}
+}
+
+// Slack moved app settings to app.slack.com/app-settings/<team>/<app>/<page>;
+// api.slack.com/apps/<app>/socket-mode now returns 404. Pin the shapes.
+func TestAppSettingsURLShapes(t *testing.T) {
+	if got := slack.AppSettingsURL("TFIXTURE", "AFIXTURE", "general"); got != "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/general" {
+		t.Fatal(got)
+	}
+	if got := slack.AppSettingsURL("TFIXTURE", "AFIXTURE", "socket-mode"); got != "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/socket-mode" {
+		t.Fatal(got)
+	}
+	for _, ids := range [][2]string{{"", "AFIXTURE"}, {"TFIXTURE", ""}, {"tbad", "AFIXTURE"}, {"TFIXTURE", "A/../x"}} {
+		if got := slack.AppSettingsURL(ids[0], ids[1], "general"); got != "https://api.slack.com/apps" {
+			t.Fatal("unknown ids must fall back to the app list", ids, got)
+		}
+	}
+	links := slack.AppLinks("TFIXTURE", "AFIXTURE")
+	if len(links) != 2 || !strings.Contains(links[0].Label, "Basic Information") || !strings.HasSuffix(links[1].URL, "/socket-mode") {
+		t.Fatal(links)
+	}
+	if links := slack.AppLinks("", ""); len(links) != 1 || links[0].URL != slack.AppsURL {
+		t.Fatal(links)
+	}
+	for _, s := range (slack.Plugin{}).SetupFlow() {
+		for _, l := range s.Links {
+			if strings.HasPrefix(l.URL, "https://api.slack.com/apps/") {
+				t.Fatal("stale api.slack.com/apps/<id> deep link", s.ID, l.URL)
+			}
+		}
+	}
+}
+
+// The token step lists the six numbered actions and marks the two values that
+// render inline with copy buttons.
+func TestAppTokenInstructions(t *testing.T) {
+	app := step(t, "app_token")
+	for _, want := range []string{"1. Click Open Basic Information", "App-Level Tokens", "Generate Token and Scopes", "2. Token Name: `chatkeeper`", "3. Click Add Scope and choose `connections:write`", "4. Click Generate", "xapp-", "5. Click Open Socket Mode", "Enable Socket Mode", "6. Paste the token", "polls every two minutes"} {
+		if !strings.Contains(app.Body, want) {
+			t.Fatal("instructions lack", want)
+		}
+	}
+}
+
+func TestAgentSetup(t *testing.T) {
+	var p pluginapi.Plugin = slack.Plugin{}
+	agent, ok := p.(pluginapi.AgentSetup)
+	if !ok || agent.SetupManifest() != slack.AppManifest {
+		t.Fatal("manifest must have a single source")
+	}
+	prompt := agent.AgentPrompt()
+	for _, want := range []string{"chatkeeper setup slack --print-manifest", "SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "connections:write", "--dry-run", "docs/agent-setup.md", "Never print"} {
+		if !strings.Contains(prompt, want) {
+			t.Fatal("prompt lacks", want)
+		}
+	}
+	if strings.Contains(prompt, "xoxb-1") || strings.Contains(prompt, "xapp-1") {
+		t.Fatal("prompt contains a token")
 	}
 }

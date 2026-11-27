@@ -126,6 +126,10 @@ func TestBrowserWizard(t *testing.T) {
 			run(title("Create your Slack app"), has("only shows the bot token"), has("App manifest (YAML)"))
 			run(chromedp.Poll(`document.querySelector('a[href^="https://api.slack.com/apps?new_app=1&manifest_yaml="]') !== null`, nil))
 			capture("create-app")
+			run(chromedp.Click("details.agent summary", chromedp.ByQuery))
+			run(chromedp.Poll(`document.querySelector('details.agent').open && document.getElementById('agent-prompt').innerText.includes('chatkeeper setup slack')`, nil))
+			capture("agent-setup")
+			run(chromedp.Click("details.agent summary", chromedp.ByQuery))
 			next("Paste your bot token")
 			capture("tokens")
 			// Item 3: Test connection reports itemized results without advancing.
@@ -144,8 +148,10 @@ func TestBrowserWizard(t *testing.T) {
 			capture("test-connection")
 			next("Add the app-level token")
 			// Item 1: the app-level token guidance deep-links the app's settings.
-			run(chromedp.Poll(`document.querySelector('a[href="https://api.slack.com/apps/AFIXTURE/general"]') !== null`, nil), has("App-Level Tokens"), has("connections:write"))
-			run(chromedp.Poll(`document.querySelector('a[href="https://api.slack.com/apps/AFIXTURE/socket-mode"]') !== null && document.querySelector('[data-copy]') !== null`, nil))
+			run(chromedp.Poll(`document.querySelector('a[href="https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/general"]') !== null`, nil), has("App-Level Tokens"), has("connections:write"))
+			run(chromedp.Poll(`document.querySelector('a[href="https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/socket-mode"]') !== null && document.querySelector('[data-copy="inline-1"]') !== null`, nil))
+			// Only this step's content: a one-line bot summary, no scope checklist.
+			run(has("Bot token OK · Fixture"), chromedp.Poll(`!document.body.innerText.includes('Scope reactions:read') && document.querySelector('.checks') === null`, nil))
 			capture("app-token")
 			// Item 2: Back keeps the bot token server-side.
 			back("Paste your bot token")
@@ -251,7 +257,7 @@ func TestBrowserWizard(t *testing.T) {
 				// reopens the app-level token step and switches to live events.
 				click("a.upgrade")
 				run(title("Add the app-level token"), has("Workspace fixture"))
-				run(chromedp.Poll(`document.querySelector('a[href="https://api.slack.com/apps/AFIXTURE/general"]') !== null`, nil))
+				run(chromedp.Poll(`document.querySelector('a[href="https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/general"]') !== null`, nil))
 				capture("enable-instant")
 				run(chromedp.SendKeys("input[name=app_token]", "xapp-synthetic"))
 				click(`button[value=save]`)

@@ -94,7 +94,20 @@ func exerciseMCP(t *testing.T, ctx context.Context, transport sdk.Transport) {
 		}
 	}
 	sort.Strings(names)
-	if !reflect.DeepEqual(names, []string{"get_thread", "list_workspaces", "search_threads"}) {
+	want := []string{"get_thread", "list_workspaces", "search_threads"}
+	if _, stdio := transport.(*sdk.CommandTransport); stdio {
+		// Local stdio agents also get the read-only setup tools.
+		want = []string{"get_thread", "list_workspaces", "search_threads", "setup_status", "validate_setup"}
+		res, e := session.CallTool(ctx, &sdk.CallToolParams{Name: "setup_status", Arguments: map[string]any{}})
+		if e != nil || res.IsError {
+			t.Fatal("setup_status", e, res)
+		}
+		b, _ := json.Marshal(res.StructuredContent)
+		if !strings.Contains(string(b), `"id":"fixture"`) || !strings.Contains(string(b), `"credentials":{`) || strings.Contains(string(b), "xoxb-") {
+			t.Fatal("setup_status", string(b))
+		}
+	}
+	if !reflect.DeepEqual(names, want) {
 		t.Fatal(names)
 	}
 	for _, tc := range []struct {
@@ -284,7 +297,7 @@ func TestMCPGoldenStdioTranscript(t *testing.T) {
 				subset(t, map[string]any{"readOnlyHint": true, "destructiveHint": false}, tool["annotations"])
 			}
 			sort.Strings(names)
-			if !reflect.DeepEqual(names, step.ToolNames) {
+			if !reflect.DeepEqual(names, append(append([]string{}, step.ToolNames...), "setup_status", "validate_setup")) {
 				t.Fatal(names)
 			}
 		}
