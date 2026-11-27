@@ -79,7 +79,7 @@ func cleanupRuntime(t *testing.T, partial bool) {
 		}
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "channel": "CFIXTURE", "ts": ts})
 	}
-	ws := pluginapi.Workspace{ID: "fixture", Platform: "slack", Storage: t.TempDir(), Channels: []string{"CFIXTURE"}, Settings: pluginapi.Settings(`{"team_id":"TFIXTURE"}`), Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"white_check_mark"}}, Cleanup: pluginapi.CleanupPolicy{Enabled: true}}
+	ws := pluginapi.Workspace{ID: "fixture", Platform: "slack", Storage: t.TempDir(), Channels: []string{"CFIXTURE"}, Settings: pluginapi.Settings(`{"team_id":"TFIXTURE"}`), Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"white_check_mark"}}, Cleanup: pluginapi.CleanupPolicy{Approval: &pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"white_check_mark"}}, Enabled: true}}
 	s, e := storage.Open(ws.Storage)
 	if e != nil {
 		t.Fatal(e)

@@ -39,7 +39,7 @@ func TestCleanupApplySurvivesRequestCancellation(t *testing.T) {
 	if _, e = s.Save(context.Background(), pluginapi.Key{Channel: "CFIXTURE", RootTS: "100.000001"}, snap); e != nil {
 		t.Fatal(e)
 	}
-	cfg := fmt.Sprintf("workspaces:\n - id: fixture\n   platform: slack\n   team_id: TFIXTURE\n   channels: [CFIXTURE]\n   storage: {type: folder, path: %q}\n   trigger: {who: owner, owners: [UOWNER], reactions: [white_check_mark]}\n   cleanup: {enabled: true}\n", dir)
+	cfg := fmt.Sprintf("workspaces:\n - id: fixture\n   platform: slack\n   team_id: TFIXTURE\n   channels: [CFIXTURE]\n   storage: {type: folder, path: %q}\n   trigger: {who: owner, owners: [UOWNER], reactions: [white_check_mark]}\n   cleanup: {enabled: true, approval: {who: owner, owners: [UOWNER], reactions: [white_check_mark]}}\n", dir)
 	if e = os.WriteFile(filepath.Join(home, "config.yaml"), []byte(cfg), 0600); e != nil {
 		t.Fatal(e)
 	}

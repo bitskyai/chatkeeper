@@ -79,6 +79,21 @@ func (Plugin) ParseWorkspace(_ context.Context, raw json.RawMessage, creds plugi
 			}
 		}
 	}
+	if cleanup, ok := m["cleanup"].(map[string]any); ok {
+		if approval, ok := cleanup["approval"].(map[string]any); ok {
+			for _, key := range []string{"owners", "reactions"} {
+				values, ok := approval[key].([]any)
+				if !ok {
+					return nil, pluginapi.ErrInvalid
+				}
+				for _, v := range values {
+					if key == "owners" && !id(v, "user") || key == "reactions" && !reactionPattern.MatchString(str(v)) {
+						return nil, pluginapi.ErrInvalid
+					}
+				}
+			}
+		}
+	}
 	return pluginapi.Settings(append([]byte{}, raw...)), nil
 }
 
@@ -96,6 +111,13 @@ func (Plugin) NewSession(_ context.Context, ws pluginapi.Workspace, env pluginap
 	triggers := map[string]bool{}
 	for _, name := range ws.Trigger.Reactions {
 		triggers[baseReaction(name)] = true
+	}
+	// Approval changes refresh an already matching archive promptly. Core still
+	// applies the independent archive trigger before it captures anything.
+	if ws.Cleanup.Approval != nil {
+		for _, name := range ws.Cleanup.Approval.Reactions {
+			triggers[baseReaction(name)] = true
+		}
 	}
 	client := NewClient(env.Credentials["bot_token"], env.HTTP)
 	client.log = pluginapi.RedactingLogger(env.Log, env.Credentials)

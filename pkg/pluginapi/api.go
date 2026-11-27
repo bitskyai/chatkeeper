@@ -46,12 +46,34 @@ type Trigger struct {
 	Owners    []string `json:"owners" yaml:"owners"`
 	Match     string   `json:"match,omitempty" yaml:"match,omitempty"`
 }
+
+// CleanupApproval requires explicit deletion approval; archive reactions never authorize deletion.
+func (w Workspace) CleanupApproval() Trigger {
+	if w.Cleanup.Approval != nil {
+		return *w.Cleanup.Approval
+	}
+	return Trigger{}
+}
+
+type CleanupSetup struct {
+	Title, WizardTitle, Instructions, Details, OAuthURL string
+	Members, Reactions                                  []Choice
+}
+type CleanupConfigurator interface {
+	CleanupSetup(context.Context, Workspace, Env) (CleanupSetup, error)
+	TestCleanupCredential(context.Context, Workspace, Env, string, bool) error
+}
+
 type CleanupPolicy struct {
-	Enabled     bool
-	AllowOthers bool
-	OwnOnly     bool
-	MinAge      time.Duration
-	TokenEnv    string
+	Approval      *Trigger
+	Scope         string
+	Every         time.Duration
+	ScheduleSince time.Time
+	Enabled       bool
+	AllowOthers   bool
+	OwnOnly       bool
+	MinAge        time.Duration
+	TokenEnv      string
 }
 type Workspace struct {
 	Cleanup               CleanupPolicy

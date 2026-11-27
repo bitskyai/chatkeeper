@@ -185,7 +185,7 @@ func (d *cleanupDriver) Check(ctx context.Context, m pluginapi.ArchiveManifest, 
 		}
 		return cleanupReadError(e, "cannot verify complete live thread")
 	}
-	if len(live) == 0 || live[0]["ts"] != m.RootTS || !ownerMatch(d.ws.Trigger, live[0]) {
+	if len(live) == 0 || live[0]["ts"] != m.RootTS || d.ws.Cleanup.Scope != "messages" && !ownerMatch(d.ws.CleanupApproval(), live[0]) {
 		return errors.New("live owner trigger missing")
 	}
 	count, ok := integer(live[0]["reply_count"])
@@ -213,6 +213,9 @@ func (d *cleanupDriver) Check(ctx context.Context, m pluginapi.ArchiveManifest, 
 		b, e := cleanupContent(msg)
 		if e != nil || !bytes.Equal(a, b) {
 			return errors.New("live message differs from archive")
+		}
+		if d.ws.Cleanup.Scope == "messages" && ownerMatch(d.ws.CleanupApproval(), prior) && !ownerMatch(d.ws.CleanupApproval(), msg) {
+			return errors.New("live delete approval missing")
 		}
 		seen[ts] = true
 	}

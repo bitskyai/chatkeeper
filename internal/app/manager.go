@@ -333,3 +333,10 @@ func (m *Manager) BearerToken() string {
 }
 
 func (m *Manager) Read(serve func()) { m.readMu.RLock(); defer m.readMu.RUnlock(); serve() }
+
+// IsPaused includes workspaces whose capture runtime has not started yet.
+func (m *Manager) IsPaused(id string) bool {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+	return m.paused[id]
+}

@@ -251,8 +251,26 @@ exact durable archive, a live identity, owner approval reaction and unchanged
 live content. Slack bot credentials can delete only their own messages. Deleting
 others requires a user admin/owner credential and explicit `allow_others: true`.
 
-Configure a workspace with `trigger.who: owner`, a nonempty `trigger.owners`
-list and its approval reactions, then add:
+In **Settings → workspace → Delete from Slack after archiving**, configure
+cleanup without editing YAML. Setup also offers **Clean up Slack (optional)**
+after the capture test; skip it to leave cleanup off. Pick yourself from named
+workspace members as the first allowed approver. Delete approvals default to
+`:wastebasket:` and remain separate from the archive trigger. Choose whole-thread
+approval on the root or individually approved messages (roots containing replies
+are preserved in message scope). Minimum age defaults to 24 hours; zero requires
+**Allow immediate**. **Delete messages posted by others** is a separate opt-in.
+
+The deletion token field writes only to the credential store. **Test** verifies
+workspace identity, token owner, scopes and admin/owner status when allowing
+others. For a user token, open the linked OAuth & Permissions page, add
+`chat:write`, `users:read`, `channels:history` and `groups:history` under **User
+Token Scopes**, reinstall and copy the **User OAuth Token** (`xoxp-`). History
+scopes support the live thread comparison; `users:read` verifies the owner.
+Bot-only cleanup uses `xoxb-` with the same scopes under **Bot Token Scopes**.
+Slack workspace permissions still apply. App links use
+`https://app.slack.com/app-settings/<TEAM_ID>/<APP_ID>/oauth`.
+
+For YAML-managed workspaces the form is read-only. The equivalent policy is:
 
 ```yaml
 cleanup:
@@ -261,7 +279,18 @@ cleanup:
   min_age_hours: 24
   # Zero requires an explicit allow_zero_age: true opt-in.
   allow_others: false
+  own_only: true
+  scope: thread  # or messages: each target needs its own approval
+  approval:
+    who: owner
+    owners: [UOWNER]  # use your workspace member ID
+    reactions: [wastebasket]
+    match: any
+  every_hours: 0  # automatic apply OFF; set >= 1 to opt in
 ```
+
+Legacy YAML without `cleanup.approval` retains its archive-trigger approval
+behavior. New UI settings write a separate cleanup approval policy.
 
 Set the referenced secret in the environment or credential store. Preview is
 offline and needs no credential:
@@ -271,7 +300,16 @@ chatkeeper cleanup --workspace example
 chatkeeper cleanup --workspace example --apply
 ```
 
-The authenticated **Cleanup** page offers per-workspace enable, preview and
+**Run automatically every N hours (apply)** defaults off. Enabling it explicitly
+authorizes scheduled deletion with the same bound-preview, archive integrity,
+live comparison, owner, age, author and journal checks. Per-message receipts and
+run results persist in the cleanup log. **Disable cleanup** and **Stop automatic
+cleanup** remain available during a source outage.
+
+The authenticated **Cleanup** page links to these settings and explains blocked
+previews, missing credentials/owners, author opt-ins and the eligibility time for
+recent threads. Its credential warnings use read-only live identity checks;
+the CLI/engine preview remains offline. The page offers per-workspace enable, preview and
 apply. Apply requires typing the workspace id, a fresh unchanged preview, and
 administrator password re-entry in server mode. Each thread reports dry-run,
 deferred, cleaned, deleted, unknown/pending, refused, rate-limited or blocked.

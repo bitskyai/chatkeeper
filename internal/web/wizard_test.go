@@ -184,6 +184,8 @@ func TestWizardBackTestSkipPickerAndCheckNow(t *testing.T) {
 		t.Fatalf("want 1 capture worker, got %d", n)
 	}
 	c.do("POST", "/setup/finish", nil)
+	c.expect("Clean up Slack (optional)", "Skip / Finish setup")
+	c.do("POST", "/setup/finish", url.Values{"cleanup_done": {"true"}})
 	c.expect("Your threads, kept safe", "Recent capture events", "Archived thread CFIXTURE / 100.000001", "Polling only")
 	c.do("POST", "/settings/check", url.Values{"workspace": {"fixture"}})
 	c.expect("Your threads, kept safe", "Check now · fixture", "already archived (unchanged)")

@@ -138,7 +138,13 @@ func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d plugin
 					return nil
 				}
 			}
-			return runThread(ctx, w, k, v, d, apply, &t)
+			return runThread(ctx, w, k, v, d, apply, &t, func() {
+				partial := r
+				partial.Threads = append(append([]Thread{}, r.Threads...), t)
+				for _, notify := range progress {
+					notify(partial)
+				}
+			})
 		})
 		if e != nil {
 			t.Reason = e.Error()
@@ -183,7 +189,7 @@ func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d plugin
 	}
 	return r
 }
-func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *storage.CleanupView, d pluginapi.CleanupDriver, apply bool, t *Thread) (runErr error) {
+func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *storage.CleanupView, d pluginapi.CleanupDriver, apply bool, t *Thread, progress ...func()) (runErr error) {
 	defer func() {
 		if recover() != nil {
 			runErr = errors.New("cleanup driver or storage operation panicked")
@@ -217,6 +223,22 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 		return a.After(b)
 	})
 	ordered = append(ordered, snap.Messages[0])
+	if w.Cleanup.Scope == "messages" {
+		selected := []pluginapi.Message{}
+		for _, msg := range ordered {
+			// Preserve a root containing replies: deleting it would remove unapproved content.
+			if fmt.Sprint(msg["ts"]) == k.RootTS && len(snap.Messages) > 1 {
+				continue
+			}
+			if OwnerTrigger(w.CleanupApproval(), msg) {
+				selected = append(selected, msg)
+			}
+		}
+		ordered = selected
+		if len(ordered) == 0 {
+			return errors.New("no individually approved messages; roots with replies require whole-thread scope")
+		}
+	}
 	targets := []string{}
 	for _, msg := range ordered {
 		ts, _ := msg["ts"].(string)
@@ -274,8 +296,15 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 	if e != nil {
 		return e
 	}
-	if w.Trigger.Who != "owner" || len(w.Trigger.Owners) == 0 || !OwnerTrigger(w.Trigger, snap.Messages[0]) {
-		return errors.New("cleanup requires archived owner trigger")
+	approval := w.CleanupApproval()
+	if len(approval.Reactions) == 0 {
+		return errors.New("no delete approval reaction configured")
+	}
+	if approval.Who != "owner" || len(approval.Owners) == 0 {
+		return errors.New("no cleanup owners configured; pick yourself in Settings")
+	}
+	if w.Cleanup.Scope != "messages" && !OwnerTrigger(approval, snap.Messages[0]) {
+		return errors.New("archived owner trigger missing: add the delete-approval reaction as a listed owner, then refresh the archive")
 	}
 	for i, msg := range ordered {
 		if slices.Contains(j.Done, targets[i]) {
@@ -312,7 +341,7 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 	}
 	if threadAge(newest) < w.Cleanup.MinAge {
 		t.Status = "deferred"
-		t.Reason = "thread is too recent"
+		t.Reason = "thread is too recent; eligible at " + newest.Add(w.Cleanup.MinAge).UTC().Format(time.RFC3339)
 		for i := range t.Results {
 			t.Results[i].Status = "deferred"
 		}
@@ -423,6 +452,11 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 			return e
 		}
 		t.Results[i].Status = "deleted"
+		slog.Info("cleanup message result", "workspace", w.ID, "channel", k.Channel, "root", k.RootTS, "message", ts, "status", "deleted")
+		t.Status = "partial"
+		for _, notify := range progress {
+			notify()
+		}
 		t.Status = "blocked"
 	}
 	t.Status = "deleted"

@@ -20,7 +20,7 @@ func cleanupFixture(t *testing.T, allow bool, token string, handler http.Handler
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.Transport = cleanupTransport{srv.URL, client.Transport}
-	w := pluginapi.Workspace{Platform: "slack", Channels: []string{"CFAKE"}, Settings: pluginapi.Settings(`{"team_id":"TFAKE"}`), Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"save"}}, Cleanup: pluginapi.CleanupPolicy{AllowOthers: allow}}
+	w := pluginapi.Workspace{Platform: "slack", Channels: []string{"CFAKE"}, Settings: pluginapi.Settings(`{"team_id":"TFAKE"}`), Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"save"}}, Cleanup: pluginapi.CleanupPolicy{Approval: &pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"save"}}, AllowOthers: allow}}
 	d, e := (Plugin{}).NewCleanupDriver(context.Background(), w, pluginapi.Env{Credentials: pluginapi.Credentials{"cleanup_token": token}, HTTP: client})
 	if e != nil {
 		t.Fatal(e)

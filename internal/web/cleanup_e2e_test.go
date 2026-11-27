@@ -42,7 +42,7 @@ func TestBrowserCleanupPreviewApply(t *testing.T) {
 	if _, e = s.Save(context.Background(), pluginapi.Key{Channel: "CFIXTURE", RootTS: "1000000000.000001"}, snapshot); e != nil {
 		t.Fatal(e)
 	}
-	cfg := fmt.Sprintf("workspaces:\n  - id: fixture\n    platform: slack\n    team_id: TFIXTURE\n    channels: [CFIXTURE]\n    storage: {type: folder, path: %q}\n    trigger: {who: owner, owners: [UOWNER], reactions: [white_check_mark]}\n    cleanup: {enabled: false}\n", dir)
+	cfg := fmt.Sprintf("workspaces:\n  - id: fixture\n    platform: slack\n    team_id: TFIXTURE\n    channels: [CFIXTURE]\n    storage: {type: folder, path: %q}\n    trigger: {who: owner, owners: [UOWNER], reactions: [white_check_mark]}\n    cleanup: {enabled: true, approval: {who: owner, owners: [UOWNER], reactions: [white_check_mark]}}\n", dir)
 	os.WriteFile(filepath.Join(home, "config.yaml"), []byte(cfg), 0600)
 	var mu sync.Mutex
 	deletes := 0
@@ -96,8 +96,7 @@ func TestBrowserCleanupPreviewApply(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	run(chromedp.Navigate(server.URL+"/login?token=synthetic-launch"), chromedp.Navigate(server.URL+"/cleanup/?workspace=fixture"), chromedp.WaitVisible("input[name=enabled]"), chromedp.Click("input[name=enabled]"))
-	click("form[action='/cleanup/enable'] button")
+	run(chromedp.Navigate(server.URL+"/login?token=synthetic-launch"), chromedp.Navigate(server.URL+"/cleanup/?workspace=fixture"), chromedp.WaitVisible("form[action='/cleanup/preview'] button"))
 	click("form[action='/cleanup/preview'] button")
 	run(chromedp.WaitVisible("table"), chromedp.WaitVisible("input[name=confirm]"))
 	var body string

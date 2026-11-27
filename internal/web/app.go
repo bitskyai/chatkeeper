@@ -42,25 +42,26 @@ type Options struct {
 	Dev                                                             bool
 }
 type App struct {
-	viewerCache      map[string]*Viewer
-	viewerGeneration int
-	opts             Options
-	db               *sql.DB
-	Manager          *app.Manager
-	Secrets          *secrets.Store
-	ctx              context.Context
-	cancel           context.CancelFunc
-	maintenanceDone  chan struct{}
-	cleanupJobs      sync.WaitGroup
-	mu, authMu       sync.Mutex
-	viewerMu         sync.Mutex
-	attempts         map[string]attempts
-	launchToken      string
-	existingConfig   bool
-	protocol         http.Handler
-	wizards          map[string]*wizard
-	reportMu         sync.Mutex
-	reports          map[string]*core.CheckReport
+	viewerCache       map[string]*Viewer
+	viewerGeneration  int
+	opts              Options
+	db                *sql.DB
+	Manager           *app.Manager
+	Secrets           *secrets.Store
+	ctx               context.Context
+	cancel            context.CancelFunc
+	maintenanceDone   chan struct{}
+	cleanupJobs       sync.WaitGroup
+	cleanupSettingsMu sync.Mutex
+	mu, authMu        sync.Mutex
+	viewerMu          sync.Mutex
+	attempts          map[string]attempts
+	launchToken       string
+	existingConfig    bool
+	protocol          http.Handler
+	wizards           map[string]*wizard
+	reportMu          sync.Mutex
+	reports           map[string]*core.CheckReport
 }
 type wizard struct {
 	mu          sync.Mutex
@@ -92,11 +93,11 @@ type card struct {
 	Ready    bool
 }
 type workspaceRow struct {
-	ID, State, Error, Transport, LastCapture string
-	Paused                                   bool
-	Fields                                   []field
-	Activity                                 []core.Activity
-	Report                                   *core.CheckReport
+	ID, State, Error, Transport, LastCapture, CleanupTitle string
+	Paused                                                 bool
+	Fields                                                 []field
+	Activity                                               []core.Activity
+	Report                                                 *core.CheckReport
 }
 type page struct {
 	Title, Kind, Body, CSRF, Error, Storage, Workspace, Reaction string
@@ -209,6 +210,8 @@ func NewApp(o Options) (*App, error) {
 	_, _ = a.db.Exec("UPDATE cleanup_runs SET status='interrupted' WHERE status='running'")
 	a.maintenanceDone = make(chan struct{})
 	go a.maintain()
+	a.cleanupJobs.Add(1)
+	go func() { defer a.cleanupJobs.Done(); a.scheduleCleanup(a.ctx) }()
 	return a, nil
 }
 func (a *App) Close() {
@@ -655,6 +658,9 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request, id, csrf string) {
 		return
 	}
 	if r.URL.Path == "/setup/finish" && r.Method == "POST" {
+		if a.offerCleanupStep(w, r, csrf, z, p) {
+			return
+		}
 		a.mu.Lock()
 		if a.wizards[id] == z {
 			delete(a.wizards, id)
