@@ -180,3 +180,31 @@ func TestKeysDoesNotReadObjects(t *testing.T) {
 		t.Fatal("Read did not verify after discovery")
 	}
 }
+
+func TestRawResponsesSurviveRefresh(t *testing.T) {
+	v := fixture(t)
+	v.Documents = nil
+	first := []byte("{\"ok\":true, \"source\":\"first\"}\n")
+	second := []byte("{\"ok\":true, \"source\":\"second\"}\n")
+	v.RawDocuments = map[string][]byte{"raw/first.json": first}
+	st, e := Open(t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer st.Close()
+	if _, e = st.Save(ctx, key, v); e != nil {
+		t.Fatal(e)
+	}
+	v.RawDocuments = map[string][]byte{"raw/second.json": second}
+	v.Messages[0]["text"] = "edited content"
+	if _, e = st.Save(ctx, key, v); e != nil {
+		t.Fatal(e)
+	}
+	saved, e := st.Read(ctx, key)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !bytes.Equal(saved.Documents["raw/first.json"], first) || !bytes.Equal(saved.Documents["raw/second.json"], second) {
+		t.Fatal("lost verbatim response during refresh")
+	}
+}

@@ -178,6 +178,8 @@ type Gap struct {
 	Reason  string `json:"reason"`
 }
 type Snapshot struct {
+	// RawDocuments contains original transport response bytes; Prepare seals them into Documents.
+	RawDocuments map[string][]byte
 	// CleanupStatus summarizes the journal state for archive readers.
 	CleanupStatus string `json:"cleanup_status,omitempty"`
 	// SourceDeletedAt projects verified journal and persisted deletion markers.

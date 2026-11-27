@@ -333,6 +333,8 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case r.URL.Path == "/logs/":
+		a.logsPage(w, r, csrf)
 	case r.URL.Path == "/" && r.Method == "GET":
 		if len(a.Manager.List()) == 0 {
 			a.startPage(w, csrf)

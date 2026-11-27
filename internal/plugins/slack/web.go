@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -69,6 +70,7 @@ var readMethods = map[string]bool{"auth.test": true, "conversations.history": tr
 type Client struct {
 	token string
 	http  *http.Client
+	log   *slog.Logger
 }
 
 func NewClient(token string, transport *http.Client) *Client {
@@ -184,6 +186,15 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 				}
 			}
 			c.coolUntil(wait)
+			logger := c.log
+			if logger == nil {
+				logger = slog.Default()
+			}
+			apiMethod := "file.download"
+			if !file {
+				apiMethod = pathLast(req.URL.Path)
+			}
+			logger.Warn("source API rate limited", "method", apiMethod, "retry", retries, "retry_after", wait)
 			if retries >= 3 {
 				return nil, errRateLimited
 			}
@@ -271,6 +282,21 @@ func parse(b []byte) (map[string]any, error) {
 var safeCode = patternsCode()
 
 func (c *Client) Call(ctx context.Context, method string, params url.Values) (map[string]any, error) {
+	return c.callRaw(ctx, method, params, nil)
+}
+func (c *Client) callRaw(ctx context.Context, method string, params url.Values, raw *[]byte) (result map[string]any, err error) {
+	logger := c.log
+	if logger == nil {
+		logger = pluginapi.RedactingLogger(slog.Default(), pluginapi.Credentials{"token": c.token})
+	}
+	started := time.Now()
+	defer func() {
+		if err != nil {
+			logger.Warn("source API failed", "method", method, "error", err, "duration", time.Since(started))
+		} else {
+			logger.Info("source API complete", "method", method, "duration", time.Since(started))
+		}
+	}()
 	if !readMethods[method] {
 		return nil, errAPI
 	}
@@ -280,6 +306,9 @@ func (c *Client) Call(ctx context.Context, method string, params url.Values) (ma
 			return nil, fmt.Errorf("%s: %w", method, e)
 		}
 		return nil, e
+	}
+	if raw != nil {
+		*raw = bytes.Clone(b)
 	}
 	doc, e := parse(b)
 	var api apiError
@@ -572,6 +601,9 @@ func nextCursor(doc map[string]any) (string, error) {
 	return cursor, nil
 }
 func (s *Session) pages(ctx context.Context, method string, p url.Values) ([]pluginapi.Message, error) {
+	return s.pagesRaw(ctx, method, p, nil)
+}
+func (s *Session) pagesRaw(ctx context.Context, method string, p url.Values, documents map[string][]byte) ([]pluginapi.Message, error) {
 	params := url.Values{}
 	for k, v := range p {
 		params[k] = append([]string{}, v...)
@@ -579,38 +611,85 @@ func (s *Session) pages(ctx context.Context, method string, p url.Values) ([]plu
 	seen, cursors := map[string]bool{}, map[string]bool{}
 	out := []pluginapi.Message{}
 	for {
-		doc, e := s.client.Call(ctx, method, params)
+		var raw []byte
+		doc, e := s.client.callRaw(ctx, method, params, &raw)
+		if documents != nil {
+			documents["raw/replies-"+sha(raw)+".json"] = raw
+		}
 		if e != nil {
 			return nil, e
 		}
 		entries, ok := doc["messages"].([]any)
 		if !ok {
-			return nil, invalid("%s returned no message list", method)
+			if documents == nil {
+				return nil, invalid("%s returned no message list", method)
+			}
+			entries = []any{map[string]any{"ts": params.Get("ts"), "chatkeeper_unrendered": "unexpected messages container retained in raw response"}}
+		}
+		reserved := map[string]bool{}
+		for k := range seen {
+			reserved[k] = true
+		}
+		for _, v := range entries {
+			if m, ok := v.(map[string]any); ok && id(m["ts"], "ts") {
+				reserved[str(m["ts"])] = true
+			}
 		}
 		for i, v := range entries {
 			m, ok := v.(map[string]any)
 			if !ok || !id(m["ts"], "ts") {
-				return nil, invalid("%s returned a message without a valid timestamp", method)
+				if method != "conversations.replies" {
+					continue
+				}
+				copy := map[string]any{}
+				for k, v := range m {
+					copy[k] = v
+				}
+				m = copy
+				if len(out) == 0 {
+					m["ts"] = params.Get("ts")
+				} else {
+					m["ts"] = syntheticTimestamp(m, reserved)
+				}
+				m["chatkeeper_unrendered"] = "unexpected message/timestamp shape retained in raw response"
 			}
 			ts := str(m["ts"])
 			if seen[ts] {
 				if method == "conversations.replies" && i == 0 && ts == params.Get("ts") {
 					continue
 				}
-				return nil, invalid("%s returned message %s twice", method, ts)
+				if method != "conversations.replies" {
+					continue
+				}
+				m["ts"] = syntheticTimestamp(m, reserved)
+				ts = str(m["ts"])
+				m["chatkeeper_unrendered"] = "duplicate timestamp retained in raw response"
 			}
 			seen[ts] = true
+			reserved[ts] = true
 			out = append(out, m)
 		}
 		cursor, e := nextCursor(doc)
 		if e != nil {
-			return nil, e
+			if documents == nil {
+				return nil, e
+			}
+			if len(out) > 0 {
+				out[0]["chatkeeper_unrendered"] = "unexpected pagination metadata retained in raw response"
+			}
+			return out, nil
 		}
 		if cursor == "" {
 			return out, nil
 		}
 		if cursors[cursor] || len(cursors) >= 100000 {
-			return nil, invalid("%s paging did not terminate", method)
+			if documents == nil {
+				return nil, invalid("%s paging did not terminate", method)
+			}
+			if len(out) > 0 {
+				out[0]["chatkeeper_unrendered"] = "pagination did not terminate; fetched responses retained"
+			}
+			return out, nil
 		}
 		cursors[cursor] = true
 		params.Set("cursor", cursor)
@@ -631,7 +710,7 @@ func (s *Session) History(ctx context.Context, channel, oldest string) ([]plugin
 	out := []pluginapi.RootRef{}
 	for _, m := range messages {
 		ts := str(m["ts"])
-		if thread, has := m["thread_ts"]; has && thread != ts {
+		if thread := str(m["thread_ts"]); id(thread, "ts") && thread != ts {
 			continue
 		}
 		root, e := normalizeRoot(m)
@@ -729,27 +808,24 @@ func normalizeRoot(m map[string]any) (pluginapi.Root, error) {
 	if raw, has := m["reactions"]; has {
 		entries, ok := raw.([]any)
 		if !ok {
-			return root, pluginapi.ErrInvalid
+			return root, nil
 		}
 		for _, v := range entries {
 			r, ok := v.(map[string]any)
 			if !ok {
-				return root, pluginapi.ErrInvalid
+				continue
 			}
 			name, ok := r["name"].(string)
 			if !ok {
-				return root, pluginapi.ErrInvalid
+				continue
 			}
 			users := []string{}
 			if raw, has := r["users"]; has {
-				a, ok := raw.([]any)
-				if !ok {
-					return root, pluginapi.ErrInvalid
-				}
+				a, _ := raw.([]any)
 				for _, v := range a {
 					u, ok := v.(string)
 					if !ok {
-						return root, pluginapi.ErrInvalid
+						continue
 					}
 					users = append(users, u)
 				}
@@ -759,11 +835,11 @@ func normalizeRoot(m map[string]any) (pluginapi.Root, error) {
 				var valid bool
 				count, valid = integer(raw)
 				if !valid || count < 0 {
-					return root, pluginapi.ErrInvalid
+					count = int64(len(users))
 				}
 			}
 			if count < int64(len(users)) {
-				return root, pluginapi.ErrInvalid
+				count = int64(len(users))
 			}
 			root.Reactions = append(root.Reactions, pluginapi.Reaction{Name: name, Users: users, Count: int(count)})
 		}
@@ -784,20 +860,29 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 	if prev != nil && (prev.Manifest.TeamID != s.team || prev.Manifest.Channel != channel || prev.Manifest.RootTS != ts) {
 		return empty, invalid("stored archive belongs to a different workspace or thread")
 	}
-	messages, e := s.pages(ctx, "conversations.replies", url.Values{"channel": {channel}, "ts": {ts}, "limit": {"100"}})
+	documents := map[string][]byte{}
+	messages, e := s.pagesRaw(ctx, "conversations.replies", url.Values{"channel": {channel}, "ts": {ts}, "limit": {"100"}}, documents)
 	if e != nil {
 		return empty, e
 	}
-	sort.Slice(messages, func(i, j int) bool { return numericTS(str(messages[i]["ts"]), str(messages[j]["ts"])) })
+	sort.Slice(messages, func(i, j int) bool {
+		if messages[i]["ts"] == ts {
+			return true
+		}
+		if messages[j]["ts"] == ts {
+			return false
+		}
+		return numericTS(str(messages[i]["ts"]), str(messages[j]["ts"]))
+	})
 	if len(messages) == 0 || messages[0]["ts"] != ts {
-		return empty, invalid("conversations.replies did not return the thread's first message")
+		messages = append([]pluginapi.Message{{"ts": ts, "text": "[unrendered: source did not return the thread root]", "chatkeeper_unrendered": "source did not return the thread root; raw response retained"}}, messages...)
 	}
 	count := int64(0)
 	if raw, has := root.Raw["reply_count"]; has {
 		var ok bool
 		count, ok = integer(raw)
 		if !ok || count < 0 {
-			return empty, invalid("thread has a malformed reply_count")
+			count = int64(len(messages) - 1)
 		}
 	}
 	returned := int64(0)
@@ -805,13 +890,11 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 		var ok bool
 		returned, ok = integer(raw)
 		if !ok {
-			return empty, invalid("thread has a malformed reply_count")
+			returned = int64(len(messages) - 1)
 		}
 	}
-	if count != returned || int64(len(messages)) != count+1 {
-		// Usually a reply arrived or was removed between reads; the next check retries.
-		return empty, invalid("thread changed while it was read (reply_count %d/%d, %d replies returned); it is retried on the next check", count, returned, len(messages)-1)
-	}
+	incomplete := count != returned || int64(len(messages)) != count+1
+
 	// Stored author records may be reused when a lookup fails, except those
 	// that were themselves placeholders (recorded as user gaps).
 	prevUsers := map[string]pluginapi.Message{}
@@ -838,10 +921,57 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 		gaps = append(gaps, pluginapi.Gap{Kind: kind, ID: item, Message: message, Reason: pluginapi.Redact(reason)})
 	}
 	var total int64
-	for i, m := range messages {
+	for i, original := range messages {
+		m := pluginapi.Message{}
+		for k, v := range original {
+			m[k] = v
+		}
+		messages[i] = m
 		mts := str(m["ts"])
+		note := func(reason string) { gap("unrendered", mts, mts, reason) }
+		for _, key := range []string{"versions", "source_events", "source_deleted_at"} {
+			if _, has := m[key]; has {
+				delete(m, key)
+				note("source field conflicts with archive annotation; original retained in raw response")
+			}
+		}
+		if i == 0 && incomplete {
+			m["reply_count"] = len(messages) - 1
+			note("reply count disagrees with returned messages; original retained in raw response")
+		}
+		if reason := renderingNote(m); reason != "" {
+			note(reason)
+		}
+		if reason := str(m["chatkeeper_unrendered"]); reason != "" {
+			note(reason)
+			delete(m, "chatkeeper_unrendered")
+		}
+		if v, has := m["text"]; has {
+			if _, ok := v.(string); !ok {
+				delete(m, "text")
+				note("non-string text retained in raw response")
+			}
+		}
+		if v, has := m["user"]; has && !id(v, "user") {
+			delete(m, "user")
+			note("malformed author retained in raw response")
+		}
+		if i == 0 {
+			if v, has := m["reply_count"]; has {
+				if n, ok := integer(v); !ok || n < 0 {
+					m["reply_count"] = len(messages) - 1
+					note("malformed reply count retained in raw response")
+				}
+			}
+		}
+		if v, has := m["thread_ts"]; has && v == nil {
+			delete(m, "thread_ts")
+			note("null thread timestamp retained in raw response")
+		}
+
 		if thread, has := m["thread_ts"]; has && thread != ts || i > 0 && !has {
-			return empty, invalid("message %s does not belong to thread %s", mts, ts)
+			m["thread_ts"] = ts
+			note("unexpected thread reference retained in raw response")
 		}
 		// Posts by apps and integrations (bot_message) may carry no user; the
 		// viewer names them from bot_profile/username instead.
@@ -869,7 +999,7 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 		}
 		entries, _, e := Content(m)
 		if e != nil {
-			return empty, fmt.Errorf("message %s: %w", mts, e)
+			gap("unrendered", mts, mts, e.Error())
 		}
 		for _, f := range entries {
 			fid := str(f["id"])
@@ -974,7 +1104,7 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 	if len(gaps) == 0 {
 		gaps = nil
 	}
-	v := pluginapi.Snapshot{Manifest: pluginapi.ArchiveManifest{Schema: 1, TeamID: s.team, Channel: channel, RootTS: ts, Permalink: link, MessageCount: len(messages), Files: entries, Gaps: gaps}, Messages: messages, Users: users, Blobs: blobs}
+	v := pluginapi.Snapshot{RawDocuments: documents, Manifest: pluginapi.ArchiveManifest{Schema: 1, TeamID: s.team, Channel: channel, RootTS: ts, Permalink: link, MessageCount: len(messages), Files: entries, Gaps: gaps}, Messages: messages, Users: users, Blobs: blobs}
 	if e = (Hooks{}).Validate(ctx, v); e != nil {
 		return empty, e
 	}
@@ -985,6 +1115,13 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 // recorded as a per-item gap: cancellation and rate limiting are transient and
 // retried by the next check, and nothing partial should be stored for them.
 func fatalRead(ctx context.Context, e error) bool {
+	var api apiError
+	if errors.As(e, &api) {
+		switch api.code {
+		case "not_authed", "invalid_auth", "token_revoked", "account_inactive":
+			return true
+		}
+	}
 	return ctx.Err() != nil || errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) || errors.Is(e, errRateLimited)
 }
 
@@ -1110,4 +1247,22 @@ func fileRedirectURL(raw string) error {
 		return pluginapi.ErrInvalid
 	}
 	return nil
+}
+
+// Synthetic keys are archive-local identities. The raw source value is retained,
+// and the unrendered gap prevents destructive cleanup of uncertain items.
+func syntheticTimestamp(m map[string]any, reserved map[string]bool) string {
+	b, _ := json.Marshal(m)
+	sum := sha256.Sum256(b)
+	n := uint64(0)
+	for _, b := range sum[:7] {
+		n = n<<8 | uint64(b)
+	}
+	for {
+		ts := fmt.Sprintf("%d.999999", n)
+		if !reserved[ts] {
+			return ts
+		}
+		n++
+	}
 }

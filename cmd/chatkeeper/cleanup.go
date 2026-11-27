@@ -7,11 +7,13 @@ import (
 	"flag"
 	"github.com/bitskyai/chatkeeper/internal/cleanup"
 	"github.com/bitskyai/chatkeeper/internal/config"
+	"github.com/bitskyai/chatkeeper/internal/logging"
 	"github.com/bitskyai/chatkeeper/internal/search"
 	"github.com/bitskyai/chatkeeper/internal/secrets"
 	"github.com/bitskyai/chatkeeper/internal/storage"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -35,6 +37,16 @@ func cleanupCommand(args []string, out io.Writer) error {
 	if f.Parse(args) != nil || f.NArg() != 0 || *workspace == "" {
 		return errors.New("usage: chatkeeper cleanup --workspace X [--apply] [--config PATH]")
 	}
+	sink, e := logging.Open(home, logging.MaxSize, logging.Backups, os.Stderr, slog.LevelInfo)
+	if e != nil {
+		return e
+	}
+	defer sink.Close()
+	previous := slog.Default()
+	slog.SetDefault(pluginapi.RedactingLogger(sink.Logger, nil))
+	defer slog.SetDefault(previous)
+	slog.Info("cleanup started", "workspace", *workspace, "apply", *apply, "version", version)
+	defer slog.Info("cleanup finished", "workspace", *workspace, "apply", *apply)
 	cfg, e := config.Load(*name, false)
 	if e != nil {
 		return e

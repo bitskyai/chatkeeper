@@ -102,3 +102,21 @@ func TestNamesAndMentions(t *testing.T) {
 		t.Fatal(s, e)
 	}
 }
+
+func TestRenderingNotesIncludeUnknownAndTruncatedContent(t *testing.T) {
+	for _, m := range []pluginapi.Message{
+		{"blocks": []any{map[string]any{"type": "future_unknown", "text": "keep me"}}},
+		{"blocks": func() []any {
+			out := []any{}
+			for range 101 {
+				out = append(out, map[string]any{"type": "section", "text": "keep"})
+			}
+			return out
+		}()},
+		{"attachments": nil},
+	} {
+		if renderingNote(m) == "" {
+			t.Fatal("missing unrendered note")
+		}
+	}
+}

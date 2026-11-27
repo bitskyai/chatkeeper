@@ -62,7 +62,8 @@ struct MenuContent: View {
         }
         Toggle("Start at Login", isOn: Binding(get: { model.loginItemEnabled }, set: { model.setLoginItem($0) }))
         Button("Check for Updates…") { model.updater.checkForUpdates() }
-        Button("Show Logs") { model.openLogs() }
+        Button("Open Logs") { model.openLogs() }
+        Button("Copy diagnostics") { model.copyDiagnostics() }
         Divider()
         Button("Quit ChatKeeper") { NSApp.terminate(nil) }
             .keyboardShortcut("q")

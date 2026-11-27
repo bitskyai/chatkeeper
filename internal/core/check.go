@@ -61,6 +61,7 @@ type checkRequest struct {
 }
 
 func (r *Runtime) record(kind, text string) {
+	r.logger().Info("capture step", "workspace", r.Workspace.ID, "step", kind, "detail", text)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.activity = append(r.activity, Activity{At: r.now(), Kind: kind, Text: text})

@@ -1,0 +1,61 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "ts": "100.000001",
+      "text": "corpusneedle <script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+      "reply_count": 0,
+      "bot_profile": {
+        "name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+        "icons": {
+          "image_48": "javascript:alert(1)"
+        }
+      },
+      "attachments": [
+        {
+          "fallback": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+          "color": "#ffee00",
+          "pretext": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+          "author_name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+          "author_link": "javascript:alert(1)",
+          "author_icon": "https://example.invalid/icon",
+          "fields": [
+            {
+              "title": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+              "value": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+              "short": true
+            }
+          ],
+          "image_url": "https://example.invalid/image",
+          "thumb_url": "https://example.invalid/thumb",
+          "footer": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+          "ts": "1700000000",
+          "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+          "service_name": "share",
+          "blocks": [
+            {
+              "type": "rich_text",
+              "elements": [
+                {
+                  "type": "rich_text_section",
+                  "elements": [
+                    {
+                      "type": "text",
+                      "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ts": 1700000000,
+          "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

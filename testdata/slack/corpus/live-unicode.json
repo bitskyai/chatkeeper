@@ -1,0 +1,74 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "user": "UFIXTURE",
+      "type": "message",
+      "ts": "100.000001",
+      "bot_id": "BFIXTURE",
+      "app_id": "AFIXTURE",
+      "text": "[chatkeeper-corpus] corpusneedle synthetic-run unicode :female-technologist::skin-tone-4: :man-woman-girl-boy: العربية 中文 日本語 ​ ‮ café",
+      "team": "TFIXTURE",
+      "bot_profile": {
+        "id": "BFIXTURE",
+        "deleted": false,
+        "name": "Fixture",
+        "updated": 1795147280,
+        "app_id": "AFIXTURE",
+        "user_id": "UFIXTURE",
+        "icons": {
+          "image_36": "https://example.invalid/sanitized",
+          "image_48": "https://example.invalid/sanitized",
+          "image_72": "https://example.invalid/sanitized"
+        },
+        "team_id": "TFIXTURE"
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "synthetic",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "[chatkeeper-corpus] corpusneedle synthetic-run unicode "
+                },
+                {
+                  "type": "emoji",
+                  "name": "female-technologist",
+                  "unicode": "1f469-1f3fd-200d-1f4bb",
+                  "skin_tone": 4
+                },
+                {
+                  "type": "text",
+                  "text": " "
+                },
+                {
+                  "type": "emoji",
+                  "name": "man-woman-girl-boy",
+                  "unicode": "1f468-200d-1f469-200d-1f467-200d-1f466"
+                },
+                {
+                  "type": "text",
+                  "text": " العربية 中文 日本語 ​ ‮ café"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "reactions": [
+        {
+          "name": "white_check_mark",
+          "users": [
+            "UFIXTURE"
+          ],
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

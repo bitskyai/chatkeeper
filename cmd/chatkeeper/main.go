@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/bitskyai/chatkeeper/internal/config"
 	"github.com/bitskyai/chatkeeper/internal/core"
+	"github.com/bitskyai/chatkeeper/internal/logging"
 	archiveMCP "github.com/bitskyai/chatkeeper/internal/mcp"
 	_ "github.com/bitskyai/chatkeeper/internal/plugins/all"
 	"github.com/bitskyai/chatkeeper/internal/search"
@@ -17,6 +18,7 @@ import (
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -52,6 +54,9 @@ func execute(args []string, out io.Writer) error {
 		printUsage(out)
 		return nil
 	}
+	if command == "logs" {
+		return logsCommand(args, out)
+	}
 	if command == "cleanup" {
 		return cleanupCommand(args, out)
 	}
@@ -80,6 +85,24 @@ func execute(args []string, out io.Writer) error {
 			return errors.New("cannot locate application home")
 		}
 		home = filepath.Join(dir, "chatkeeper")
+	}
+	if command == "run" || command == "backfill" {
+		level := slog.LevelInfo
+		if value := os.Getenv("CHATKEEPER_LOG_LEVEL"); value != "" {
+			if e := level.UnmarshalText([]byte(value)); e != nil {
+				return errors.New("invalid CHATKEEPER_LOG_LEVEL")
+			}
+		}
+		sink, e := logging.Open(home, logging.MaxSize, logging.Backups, os.Stderr, level)
+		if e != nil {
+			return fmt.Errorf("open persistent logs: %w", e)
+		}
+		defer sink.Close()
+		previous := slog.Default()
+		slog.SetDefault(pluginapi.RedactingLogger(sink.Logger, nil))
+		defer slog.SetDefault(previous)
+		slog.Info("startup", "version", version, "command", command, "home", home)
+		defer slog.Info("command finished", "command", command)
 	}
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -181,6 +204,7 @@ func execute(args []string, out io.Writer) error {
 
 	}
 
+	slog.Info("capture configuration", "workspaces", len(cfg.Workspaces), "version", version)
 	count := 0
 	for _, entry := range cfg.Workspaces {
 		store, e := storage.Open(entry.Workspace.Storage)
@@ -266,6 +290,7 @@ Commands:
   cleanup       Preview cleanup (--workspace X; --apply enables source deletion)
   mcp           Serve read-only MCP over stdio
   healthcheck   GET /healthz; exit 0 when healthy, 1 on failure
+  logs          Tail persistent logs (--follow; --filter TEXT)
   version       Print build version and compiled plugins
   help          Show this help
 

@@ -137,7 +137,7 @@ func TestPagination(t *testing.T) {
 		{"repeat root", `{"ok":true,"messages":[{"ts":"100.000001"}],"has_more":true,"response_metadata":{"next_cursor":"next"}}`, `{"ok":true,"messages":[{"ts":"100.000001"},{"ts":"101.000001"}]}`, false, 2},
 		{"missing cursor", `{"ok":true,"messages":[],"has_more":true}`, ``, true, 0},
 		{"repeated cursor", `{"ok":true,"messages":[],"has_more":true,"response_metadata":{"next_cursor":"next"}}`, `{"ok":true,"messages":[],"has_more":true,"response_metadata":{"next_cursor":"next"}}`, true, 0},
-		{"duplicate reply", `{"ok":true,"messages":[{"ts":"100.000001"},{"ts":"101.000001"}],"response_metadata":{"next_cursor":"next"}}`, `{"ok":true,"messages":[{"ts":"101.000001"}]}`, true, 0},
+		{"duplicate reply", `{"ok":true,"messages":[{"ts":"100.000001"},{"ts":"101.000001"}],"response_metadata":{"next_cursor":"next"}}`, `{"ok":true,"messages":[{"ts":"101.000001"}]}`, false, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			n := 0

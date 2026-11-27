@@ -1,0 +1,45 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "ts": "100.000001",
+      "text": "corpusneedle <script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+      "reply_count": 0,
+      "bot_profile": {
+        "name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+        "icons": {
+          "image_48": "javascript:alert(1)"
+        }
+      },
+      "blocks": [
+        {
+          "type": "table",
+          "rows": [
+            [
+              {
+                "type": "raw_text",
+                "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
+              },
+              {
+                "type": "rich_text",
+                "elements": [
+                  {
+                    "type": "rich_text_section",
+                    "elements": [
+                      {
+                        "type": "text",
+                        "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

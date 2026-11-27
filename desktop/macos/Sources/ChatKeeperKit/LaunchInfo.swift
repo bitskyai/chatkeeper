@@ -92,7 +92,11 @@ public struct LaunchInfo: Equatable, Sendable {
 
 /// Removes per-launch tokens before child output is written to a log file.
 public func redactSecrets(_ line: String) -> String {
-    guard let regex = try? NSRegularExpression(pattern: "token=[^&\\s]+") else { return line }
-    let range = NSRange(line.startIndex..., in: line)
-    return regex.stringByReplacingMatches(in: line, range: range, withTemplate: "token=REDACTED")
+    var result = line
+    for pattern in ["token=[^&\\s]+", "\\bxox[a-z]?[.-][A-Za-z0-9._-]+", "\\bxapp-[A-Za-z0-9-]+", "(?i)bearer\\s+[^\\s\"',;]+", "(?i)(authorization|cookie|set-cookie)\\s*[:=]\\s*[^\\n]+", "[A-Za-z0-9+/_=-]{48,}"] {
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            result = regex.stringByReplacingMatches(in: result, range: NSRange(result.startIndex..., in: result), withTemplate: pattern.hasPrefix("token=") ? "token=REDACTED" : "REDACTED")
+        }
+    }
+    return result
 }

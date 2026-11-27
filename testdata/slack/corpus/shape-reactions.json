@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "ts": "100.000001",
+      "text": "corpusneedle <script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+      "reply_count": 0,
+      "bot_profile": {
+        "name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+        "icons": {
+          "image_48": "javascript:alert(1)"
+        }
+      },
+      "edited": {
+        "user": "UFIXTURE",
+        "ts": "101.000001"
+      },
+      "reactions": {
+        "unexpected": [
+          "<script>alert(1)</script>",
+          null,
+          17
+        ]
+      },
+      "pinned_to": [
+        "CFIXTURE"
+      ],
+      "reply_users": [
+        "UFIXTURE"
+      ],
+      "user_profile": {
+        "display_name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
+      },
+      "app_id": "AFIXTURE",
+      "metadata": {
+        "event_type": "synthetic",
+        "event_payload": {
+          "x": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
+        }
+      },
+      "unknown_future": {
+        "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
+      }
+    }
+  ],
+  "has_more": false
+}

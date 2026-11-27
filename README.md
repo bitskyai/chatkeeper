@@ -297,3 +297,5 @@ the web confirmation step. Enable it only after reviewing a dry-run and the
 workspace age, owner and credential policies. The real Slack gates verify
 deletion, viewer markers, tamper refusal, refresh/backfill retention and new
 reply capture after partial cleanup.
+
+Persistent diagnostics: see [logging and platform paths](docs/logging.md). Slack compatibility fixtures, fuzzing, live results and remaining coverage gaps are documented in the [corpus audit](docs/slack-corpus.md).
