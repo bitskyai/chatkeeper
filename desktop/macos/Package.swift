@@ -11,7 +11,9 @@ var targets: [Target] = [
 var dependencies: [Package.Dependency] = []
 
 #if os(macOS)
-dependencies.append(.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1"))
+// Pinned by commit (Sparkle 2.10.1); Package.resolved is committed and CI
+// resolves with --force-resolved-versions. Bump both together.
+dependencies.append(.package(url: "https://github.com/sparkle-project/Sparkle", revision: "ab7d71291238df6e0492143b120c9b696a35f603"))
 targets.append(
     .executableTarget(
         name: "ChatKeeper",

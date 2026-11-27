@@ -18,7 +18,9 @@ for three things:
   token) every 5 s. The JSON has workspace ids, states, error classes and
   timestamps, plus the last five archived threads. It never contains
   credentials, settings, paths or message content.
-- **Pause/Resume** sends `POST /api/desktop/pause {"paused": true|false}`.
+- **Pause/Resume** sends `POST /api/desktop/pause {"paused": true|false}`. It
+  sets that state on every workspace in one reload and one database
+  transaction, so the call is idempotent and never leaves a partial pause.
 
 The `/api/desktop/*` endpoints exist only in desktop mode and accept only the
 launch token, never a browser cookie.
@@ -30,6 +32,15 @@ running" and the app attaches to that instance via `instance.url`. Quit leaves a
 attached instance running and stops the app's own child (SIGTERM, then SIGKILL
 after 10 s). If the child exits unexpectedly, the app restarts it with
 exponential backoff and gives up after 5 exits in 5 minutes.
+
+**No orphaned server.** The child runs in *launcher mode*
+(`CHATKEEPER_LAUNCHER=menubar`, `CHATKEEPER_LAUNCHER_PID=<app pid>`): its stdin
+is a pipe whose write end only the app holds, and the server shuts down
+gracefully on stdin EOF or when its parent pid changes. Both happen when the app
+crashes or is force-quit. The app also records the child it owns
+(pid, executable path and start time) in `desktop-child.json` in the data
+folder; on the next launch it stops that exact process if it is still running
+before starting a new one, instead of attaching to it as an external instance.
 
 Child stderr and stdout are logged to `~/Library/Logs/ChatKeeper/chatkeeper.log`
 with tokens redacted. **Show Logs** opens that file.
@@ -72,26 +83,34 @@ To test with another port, run `defaults write ai.bitsky.chatkeeper ServerPort -
   - smoke-test the bundled server's status endpoint
   - launch the real app, check that it started its server, quit it, and check
     that the child stopped cleanly
+  - SIGKILL the app and check that its server exits by itself, then relaunch
+    and quit again
   - upload the DMG and zip as workflow artifacts
 
-  These jobs use no secrets.
+  These jobs use no secrets. Sparkle is pinned by commit in `Package.swift`
+  and `Package.resolved`; builds use `--force-resolved-versions`.
 - **`v*` tags** (environment `release`) run these steps:
   - rebuild
   - wait for the GitHub Release that `release.yml` (GoReleaser) creates
+  - attest the DMG, zip and `.sha256` with GitHub build provenance
   - upload `ChatKeeper-VERSION.dmg`, `.zip`, `.sha256` and `appcast.xml`
   - append install notes
-  - push `Casks/chatkeeper-app.rb` to `bitskyai/homebrew-tap`
+  - push `Casks/chatkeeper-app.rb` to `bitskyai/homebrew-tap` (stable tags
+    only; prereleases such as `v0.1.0-rc.1` are never published to the tap)
+
+  Each secret is passed only to the step that needs it.
 
 ### Configuration switches (repository or `release` environment)
 
 | Name | Kind | Effect when set |
 | --- | --- | --- |
-| `HOMEBREW_TAP_TOKEN` | secret | Fine-grained PAT with **Contents: read and write** on `bitskyai/homebrew-tap`. GoReleaser uses it to publish `Formula/chatkeeper.rb`, and this workflow uses it to publish `Casks/chatkeeper-app.rb`. When it is unset, both are skipped. |
+| `HOMEBREW_TAP_TOKEN` | secret | Fine-grained PAT with **Contents: read and write** on `bitskyai/homebrew-tap`. `release.yml` uses it to publish `Formula/chatkeeper.rb` (rendered by `scripts/make-formula.py`), and this workflow uses it to publish `Casks/chatkeeper-app.rb`. It is sent as an HTTP header (`scripts/publish-tap.sh`), never in a URL. When it is unset, both are skipped. |
 | `SPARKLE_PUBLIC_ED_KEY` | variable | Embedded as `SUPublicEDKey`. This enables in-app updates. Without it, **Check for Updates…** opens the Releases page. |
 | `SPARKLE_ED_PRIVATE_KEY` | secret | Signs the update zip and publishes `appcast.xml`. |
 | `MACOS_CERTIFICATE_P12` / `MACOS_CERTIFICATE_PASSWORD` | secrets | Base64 Developer ID Application certificate (.p12) and its password. |
 | `MACOS_CODESIGN_IDENTITY` | variable | For example `Developer ID Application: Example (TEAMID)`. With the certificate, this switches from ad-hoc signing to Developer ID signing with the hardened runtime. |
-| `APPLE_ID` / `APPLE_TEAM_ID` / `APPLE_APP_PASSWORD` | secrets | Enable `notarytool` notarization and stapling of the app and DMG. |
+| `APPLE_NOTARY_API_KEY` | secret | App Store Connect API key (`.p8` contents). With a Developer ID identity, enables `notarytool` notarization and stapling of the app and DMG. |
+| `APPLE_NOTARY_API_KEY_ID` / `APPLE_NOTARY_API_ISSUER` | variables | Key ID and issuer ID of that API key. |
 
 With none of these set, the release is **unsigned**: every Mach-O is ad-hoc
 signed with `codesign -s -`, so it runs on Apple silicon. The cask removes the
@@ -130,11 +149,20 @@ longer verify updates.
    gh secret set MACOS_CERTIFICATE_PASSWORD --env release
    gh variable set MACOS_CODESIGN_IDENTITY --env release --body 'Developer ID Application: …'
    ```
-3. Create an app-specific password at appleid.apple.com. Store it as
-   `APPLE_APP_PASSWORD`, along with `APPLE_ID` and `APPLE_TEAM_ID`.
+3. In App Store Connect → Users and Access → Integrations, create a Team API
+   key with the Developer role and download `AuthKey_<ID>.p8`:
+   ```sh
+   gh secret set APPLE_NOTARY_API_KEY --env release < AuthKey_XXXXXXXXXX.p8
+   gh variable set APPLE_NOTARY_API_KEY_ID --env release --body XXXXXXXXXX
+   gh variable set APPLE_NOTARY_API_ISSUER --env release --body <issuer uuid>
+   ```
+   `package.sh` writes the key to a 0600 temp file for `notarytool`; no
+   password is ever passed on a command line.
 4. Tag a release. The workflow then signs with the hardened runtime, notarizes,
    staples, and drops the unsigned notes and the cask's quarantine workaround.
 
 Locally, the same switch is
-`CODESIGN_IDENTITY='Developer ID Application: …' NOTARIZE=1 APPLE_ID=… APPLE_TEAM_ID=… APPLE_APP_PASSWORD=… scripts/package.sh`
-after running `build-app.sh` with the same `CODESIGN_IDENTITY`.
+`CODESIGN_IDENTITY='Developer ID Application: …' NOTARIZE=1 NOTARY_KEYCHAIN_PROFILE=chatkeeper-notary scripts/package.sh`
+after running `build-app.sh` with the same `CODESIGN_IDENTITY`. Create the
+profile once, interactively, with `xcrun notarytool store-credentials chatkeeper-notary`
+(it prompts for the password and stores it in your login Keychain).

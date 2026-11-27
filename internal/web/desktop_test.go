@@ -160,3 +160,89 @@ func TestDesktopLoginNextIsConfined(t *testing.T) {
 		}
 	}
 }
+
+func pausedSet(t *testing.T, a *App) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	for _, r := range a.Manager.List() {
+		out[r.Entry.Workspace.ID] = r.Paused
+	}
+	rows, e := a.db.Query("SELECT workspace,paused FROM workspace_flags")
+	if e == nil {
+		for rows.Next() {
+			var id string
+			var p bool
+			if rows.Scan(&id, &p) == nil && p != out[id] {
+				t.Fatalf("persisted flag for %s = %v, running = %v", id, p, out[id])
+			}
+		}
+		_ = rows.Close()
+	}
+	return out
+}
+
+func TestDesktopPauseResumeIsExplicitAndAtomic(t *testing.T) {
+	if _, ok := pluginapi.Legacy(); !ok {
+		t.Skip("no plugin")
+	}
+	a, e := NewApp(Options{Home: t.TempDir(), Mode: "desktop", Host: "127.0.0.1", LaunchToken: "synthetic-launch"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer a.Close()
+	a.Secrets.Desktop = false
+	t.Setenv("SYNTHETIC_BOT", "xoxb-synthetic")
+	data := fmt.Sprintf("workspaces:\n- id: one\n  platform: slack\n  team_id: TONE\n  bot_token_env: SYNTHETIC_BOT\n  storage: {path: %q}\n- id: two\n  platform: slack\n  team_id: TTWO\n  bot_token_env: SYNTHETIC_BOT\n  storage: {path: %q}\n", filepath.Join(a.opts.Home, "a1"), filepath.Join(a.opts.Home, "a2"))
+	if e = os.WriteFile(a.opts.Config, []byte(data), 0600); e != nil {
+		t.Fatal(e)
+	}
+	// Mixed start: "one" paused, "two" running. A toggle would flip both.
+	a.Manager.SetPaused("one", true)
+	if e = a.Manager.Reload(); e != nil {
+		t.Fatal(e)
+	}
+	post := func(body string) desktopStatus {
+		t.Helper()
+		w := desktopRequest(a, "POST", "/api/desktop/pause", "synthetic-launch", body)
+		if w.Code != 200 {
+			t.Fatal(body, w.Code, w.Body)
+		}
+		var s desktopStatus
+		if e := json.Unmarshal(w.Body.Bytes(), &s); e != nil {
+			t.Fatal(e)
+		}
+		return s
+	}
+	for i := 0; i < 2; i++ { // pausing twice stays paused
+		if s := post(`{"paused":true}`); !s.Paused || s.State != "paused" {
+			t.Fatalf("pause %d: %+v", i, s)
+		}
+		if got := pausedSet(t, a); !got["one"] || !got["two"] {
+			t.Fatalf("pause %d: %v", i, got)
+		}
+	}
+	for i := 0; i < 2; i++ { // resuming twice stays resumed
+		if s := post(`{"paused":false}`); s.Paused || s.State == "paused" {
+			t.Fatalf("resume %d: %+v", i, s)
+		}
+		if got := pausedSet(t, a); got["one"] || got["two"] {
+			t.Fatalf("resume %d: %v", i, got)
+		}
+	}
+	if w := desktopRequest(a, "POST", "/api/desktop/pause", "synthetic-launch", `{}`); w.Code != 400 {
+		t.Fatal("missing paused field accepted", w.Code)
+	}
+	// A database failure changes nothing, in memory or on disk.
+	if _, e = a.db.Exec("ALTER TABLE workspace_flags RENAME TO workspace_flags_hidden"); e != nil {
+		t.Fatal(e)
+	}
+	if w := desktopRequest(a, "POST", "/api/desktop/pause", "synthetic-launch", `{"paused":true}`); w.Code != 503 {
+		t.Fatal("db failure not reported", w.Code, w.Body)
+	}
+	if _, e = a.db.Exec("ALTER TABLE workspace_flags_hidden RENAME TO workspace_flags"); e != nil {
+		t.Fatal(e)
+	}
+	if got := pausedSet(t, a); got["one"] || got["two"] {
+		t.Fatalf("partial pause after db failure: %v", got)
+	}
+}

@@ -4,8 +4,13 @@
 #
 #   VERSION            required, without the leading "v"
 #   CODESIGN_IDENTITY  "-" (default, ad-hoc) or a Developer ID identity
-#   NOTARIZE=1         submit to Apple notary service and staple; needs
-#                      APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
+#   NOTARIZE=1         submit to Apple notary service and staple. Credentials
+#                      never go on a command line as a password:
+#                        NOTARY_KEYCHAIN_PROFILE  a profile saved once with
+#                          `xcrun notarytool store-credentials` (local use), or
+#                        NOTARY_API_KEY (.p8 contents, e.g. a CI secret) or
+#                          NOTARY_API_KEY_PATH, plus NOTARY_API_KEY_ID and
+#                          NOTARY_API_ISSUER (App Store Connect API key)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,9 +23,27 @@ DMG="$DIST/ChatKeeper-$VERSION.dmg"
 
 [ -d "$APP" ] || { echo "missing $APP; run scripts/build-app.sh" >&2; exit 1; }
 
+NOTARY_ARGS=()
+if [ "${NOTARIZE:-0}" = "1" ]; then
+  if [ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]; then
+    NOTARY_ARGS=(--keychain-profile "$NOTARY_KEYCHAIN_PROFILE")
+  else
+    : "${NOTARY_API_KEY_ID:?set NOTARY_KEYCHAIN_PROFILE or NOTARY_API_KEY_ID/NOTARY_API_ISSUER}"
+    : "${NOTARY_API_ISSUER:?set NOTARY_API_ISSUER}"
+    if [ -n "${NOTARY_API_KEY:-}" ]; then
+      keydir="$(mktemp -d)"
+      trap 'rm -rf "$keydir"' EXIT
+      (umask 077 && printf '%s\n' "$NOTARY_API_KEY" > "$keydir/AuthKey.p8")
+      NOTARY_API_KEY_PATH="$keydir/AuthKey.p8"
+      unset NOTARY_API_KEY
+    fi
+    : "${NOTARY_API_KEY_PATH:?set NOTARY_API_KEY or NOTARY_API_KEY_PATH}"
+    NOTARY_ARGS=(--key "$NOTARY_API_KEY_PATH" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER")
+  fi
+fi
+
 notarize() {
-  xcrun notarytool submit "$1" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
-    --password "$APPLE_APP_PASSWORD" --wait
+  xcrun notarytool submit "$1" "${NOTARY_ARGS[@]}" --wait
 }
 
 if [ "${NOTARIZE:-0}" = "1" ]; then

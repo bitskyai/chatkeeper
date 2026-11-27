@@ -9,6 +9,7 @@ on:
       - 'desktop/**'
       - 'internal/web/desktop*.go'
       - 'cmd/chatkeeper/**'
+      - 'internal/app/**'
       - '.github/workflows/desktop.yml'
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'desktop/**'
       - 'internal/web/desktop*.go'
       - 'cmd/chatkeeper/**'
+      - 'internal/app/**'
       - '.github/workflows/desktop.yml'
     tags: ['v*']
 permissions:
@@ -44,11 +46,17 @@ jobs:
           sw_vers
           swift --version
           xcodebuild -version
+      - name: Resolve pinned Swift dependencies (Package.resolved)
+        working-directory: desktop/macos
+        run: |
+          swift package resolve --force-resolved-versions
+          cat Package.resolved
+          grep -q '"revision" : "ab7d71291238df6e0492143b120c9b696a35f603"' Package.resolved
       - name: Unit tests (ChatKeeperKit)
         working-directory: desktop/macos
-        run: swift test
-      - name: Go desktop endpoints
-        run: go test -count=1 -run 'Desktop|InstanceLock' ./internal/web ./cmd/chatkeeper
+        run: swift test --force-resolved-versions
+      - name: Go desktop endpoints and launcher mode
+        run: go test -count=1 -race -run 'Desktop|InstanceLock|Launcher' ./internal/web ./cmd/chatkeeper
       - name: Build ChatKeeper.app (universal, ad-hoc signed)
         working-directory: desktop/macos
         env:
@@ -106,6 +114,29 @@ jobs:
           for _ in $(seq 1 30); do pgrep -f "ChatKeeper.app/Contents/" >/dev/null || break; sleep 0.5; done
           if pgrep -fl "ChatKeeper.app/Contents/"; then echo "app or server still running after quit"; exit 1; fi
           [ ! -e "$support/instance.url" ] || { echo "server did not shut down cleanly"; exit 1; }
+      - name: Force-quit the app; the server must not be orphaned
+        working-directory: desktop/macos
+        run: |
+          app="$PWD/dist/ChatKeeper.app"
+          support="$HOME/Library/Application Support/chatkeeper"
+          server="ChatKeeper.app/Contents/Resources/chatkeeper"
+          open -n "$app"
+          for _ in $(seq 1 60); do [ -s "$support/instance.url" ] && break; sleep 0.5; done
+          [ -s "$support/instance.url" ] || { echo "app did not start its server"; exit 1; }
+          [ -s "$support/desktop-child.json" ] || { echo "owned child not recorded"; exit 1; }
+          child="$(pgrep -f "$server")"
+          pkill -KILL -f "ChatKeeper.app/Contents/MacOS/ChatKeeper"
+          for _ in $(seq 1 40); do kill -0 "$child" 2>/dev/null || break; sleep 0.25; done
+          if kill -0 "$child" 2>/dev/null; then echo "server $child orphaned after app SIGKILL"; exit 1; fi
+          [ ! -e "$support/instance.url" ] || { echo "orphaned server did not shut down cleanly"; exit 1; }
+          # Relaunch: the app must own (not attach to) a fresh server, and Quit stops it.
+          open -n "$app"
+          for _ in $(seq 1 60); do [ -s "$support/instance.url" ] && break; sleep 0.5; done
+          [ -s "$support/instance.url" ] || { echo "relaunch did not start its server"; cat ~/Library/Logs/ChatKeeper/chatkeeper.log || true; exit 1; }
+          osascript -e 'tell application id "ai.bitsky.chatkeeper" to quit'
+          for _ in $(seq 1 30); do pgrep -f "ChatKeeper.app/Contents/" >/dev/null || break; sleep 0.5; done
+          if pgrep -fl "ChatKeeper.app/Contents/"; then echo "still running after quit"; exit 1; fi
+          [ ! -e "$support/desktop-child.json" ] || { echo "owned child record left after quit"; exit 1; }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ChatKeeper-macOS
@@ -124,20 +155,14 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+      id-token: write
+      attestations: write
+    # Secrets are passed only to the step that uses each one; job-level env
+    # holds non-secret values only.
     env:
       TAG: ${{ github.ref_name }}
-      GH_TOKEN: ${{ github.token }}
-      # Signing switch: once a Developer ID certificate is stored, these turn
-      # ad-hoc signing into Developer ID signing + notarization.
-      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       MACOS_CODESIGN_IDENTITY: ${{ vars.MACOS_CODESIGN_IDENTITY }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
       SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
-      SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -147,6 +172,9 @@ jobs:
         with:
           go-version: '1.26.x'
       - name: Select version and signing mode
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: |
           echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
@@ -156,15 +184,12 @@ jobs:
             security create-keychain -p "$pass" "$keychain"
             security set-keychain-settings -lut 3600 "$keychain"
             security unlock-keychain -p "$pass" "$keychain"
-            echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+            (umask 077 && printf '%s' "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12")
             security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
             rm -f "$RUNNER_TEMP/cert.p12"
             security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain" >/dev/null
             security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
             echo "CODESIGN_IDENTITY=$MACOS_CODESIGN_IDENTITY" >> "$GITHUB_ENV"
-            if [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_APP_PASSWORD" ]; then
-              echo "NOTARIZE=1" >> "$GITHUB_ENV"
-            fi
             echo "SIGNED=1" >> "$GITHUB_ENV"
           else
             echo "CODESIGN_IDENTITY=-" >> "$GITHUB_ENV"
@@ -172,25 +197,45 @@ jobs:
           fi
       - name: Test
         working-directory: desktop/macos
-        run: swift test
+        run: swift test --force-resolved-versions
       - name: Build and package
         working-directory: desktop/macos
+        env:
+          # App Store Connect API key; package.sh writes it to a 0600 temp
+          # file for notarytool, never a command-line password.
+          NOTARY_API_KEY: ${{ secrets.APPLE_NOTARY_API_KEY }}
+          NOTARY_API_KEY_ID: ${{ vars.APPLE_NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER: ${{ vars.APPLE_NOTARY_API_ISSUER }}
         run: |
+          if [ "$SIGNED" = 1 ] && [ -n "$NOTARY_API_KEY" ] && [ -n "$NOTARY_API_KEY_ID" ] && [ -n "$NOTARY_API_ISSUER" ]; then
+            export NOTARIZE=1
+          fi
           scripts/build-app.sh
           scripts/package.sh
+      - name: Attest DMG and zip
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            desktop/macos/dist/ChatKeeper-*.dmg
+            desktop/macos/dist/ChatKeeper-*.zip
+            desktop/macos/dist/ChatKeeper-*.sha256
       - name: Sparkle appcast
-        if: ${{ env.SPARKLE_ED_PRIVATE_KEY != '' && env.SPARKLE_PUBLIC_ED_KEY != '' }}
+        if: ${{ vars.SPARKLE_PUBLIC_ED_KEY != '' }}
         working-directory: desktop/macos
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
+          [ -n "$SPARKLE_ED_PRIVATE_KEY" ] || { echo "SPARKLE_ED_PRIVATE_KEY unset; no appcast"; exit 0; }
           sign_update="$(find .build/artifacts -type f -name sign_update -perm -u+x | head -n1)"
           [ -n "$sign_update" ] || { echo "sign_update not found"; exit 1; }
           keyfile="$RUNNER_TEMP/ed25519.key"
-          umask 077
-          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$keyfile"
+          (umask 077 && printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$keyfile")
           sig="$("$sign_update" --ed-key-file "$keyfile" "dist/ChatKeeper-$VERSION.zip")"
           rm -f "$keyfile"
           python3 scripts/make-appcast.py --version "$VERSION" --build "$BUILD_NUMBER" --signature "$sig" --out dist/appcast.xml
       - name: Wait for the GitHub Release from release.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           for _ in $(seq 1 120); do
             gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
@@ -200,11 +245,15 @@ jobs:
           exit 1
       - name: Upload DMG, zip and appcast
         working-directory: desktop/macos/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           files=("ChatKeeper-$VERSION.dmg" "ChatKeeper-$VERSION.zip" "ChatKeeper-$VERSION.sha256")
           [ -f appcast.xml ] && files+=(appcast.xml)
           gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
       - name: Add desktop install notes
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > "$RUNNER_TEMP/notes.md"
           if ! grep -q '## macOS desktop app' "$RUNNER_TEMP/notes.md"; then
@@ -213,7 +262,9 @@ jobs:
               echo '## macOS desktop app'
               echo
               echo "Download \`ChatKeeper-$VERSION.dmg\` (Apple silicon and Intel, macOS 13+) or run"
-              echo '`brew install --cask bitskyai/tap/chatkeeper-app`.'
+              echo '`brew install --cask bitskyai/tap/chatkeeper-app` (stable releases only).'
+              echo "Checksums: \`ChatKeeper-$VERSION.sha256\`; verify provenance with"
+              echo "\`gh attestation verify ChatKeeper-$VERSION.dmg --repo $GITHUB_REPOSITORY\`."
               if [ "$SIGNED" != 1 ]; then
                 echo
                 echo 'This build is **not signed with an Apple Developer ID** (ad-hoc signed only). On first launch:'
@@ -228,21 +279,16 @@ jobs:
             } >> "$RUNNER_TEMP/notes.md"
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
           fi
-      - name: Publish Homebrew cask
-        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+      - name: Publish Homebrew cask (stable tags only)
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          tap="$RUNNER_TEMP/homebrew-tap"
-          git clone --depth 1 "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/bitskyai/homebrew-tap.git" "$tap"
+          [ -n "$HOMEBREW_TAP_TOKEN" ] || { echo "HOMEBREW_TAP_TOKEN unset; cask not published"; exit 0; }
           flags=()
           [ "$SIGNED" = 1 ] || flags+=(--unsigned)
           [ -n "$SPARKLE_PUBLIC_ED_KEY" ] && flags+=(--auto-updates)
+          cask="$RUNNER_TEMP/chatkeeper-app.rb"
           python3 desktop/macos/scripts/make-cask.py --version "$VERSION" --dmg "desktop/macos/dist/ChatKeeper-$VERSION.dmg" \
-            --out "$tap/Casks/chatkeeper-app.rb" "${flags[@]}"
-          ruby -c "$tap/Casks/chatkeeper-app.rb"
-          cd "$tap"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Casks/chatkeeper-app.rb
-          if git diff --cached --quiet; then echo "cask unchanged"; exit 0; fi
-          git commit -m "chatkeeper-app $TAG"
-          git push origin HEAD
+            --out "$cask" "${flags[@]}"
+          ruby -c "$cask"
+          scripts/publish-tap.sh Casks/chatkeeper-app.rb "$cask" "chatkeeper-app $TAG"

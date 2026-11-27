@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 /// The per-launch login URL printed by `chatkeeper run` in desktop mode
 /// (`Open ChatKeeper: http://127.0.0.1:8787/login?token=…`) or stored in the
@@ -67,9 +72,21 @@ public struct LaunchInfo: Equatable, Sendable {
         baseURL.appendingPathComponent(String(path.drop(while: { $0 == "/" })))
     }
 
+    /// `localhost`, or an IP literal in 127.0.0.0/8 or ::1. Hostnames that
+    /// merely start with "127." (e.g. `127.0.0.1.evil.example`) are rejected.
     static func isLoopback(_ host: String) -> Bool {
         let h = host.trimmingCharacters(in: CharacterSet(charactersIn: "[]")).lowercased()
-        return h == "localhost" || h == "::1" || h.hasPrefix("127.")
+        if h == "localhost" { return true }
+        var v4 = in_addr()
+        if inet_pton(AF_INET, h, &v4) == 1 {
+            return UInt32(bigEndian: v4.s_addr) >> 24 == 127
+        }
+        var v6 = in6_addr()
+        if inet_pton(AF_INET6, h, &v6) == 1 {
+            let bytes = withUnsafeBytes(of: &v6) { Array($0) }
+            return bytes == Array(repeating: 0, count: 15) + [1]
+        }
+        return false
     }
 }
 

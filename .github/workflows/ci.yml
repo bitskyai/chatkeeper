@@ -113,6 +113,12 @@ jobs:
           version: v2.14.1
           args: release --snapshot --clean
       - run: cd dist && sha256sum --check SHA256SUMS
+      - name: Render Homebrew formula
+        run: |
+          version="$(jq -r .version dist/metadata.json)"
+          python3 scripts/make-formula.py --version "$version" --sums dist/SHA256SUMS --out "$RUNNER_TEMP/chatkeeper.rb"
+          ruby -c "$RUNNER_TEMP/chatkeeper.rb"
+          grep -q 'keep_alive successful_exit: false' "$RUNNER_TEMP/chatkeeper.rb"
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - run: docker build -t chatkeeper:ci .
       - name: Check empty bootstrap password fails closed

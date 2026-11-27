@@ -31,8 +31,8 @@ echo "==> Swift menu-bar app ($VERSION, build $BUILD_NUMBER)"
 cd "$HERE"
 slices=()
 for triple in arm64-apple-macosx13.0 x86_64-apple-macosx13.0; do
-  swift build -c release --product ChatKeeper --triple "$triple"
-  slices+=("$(swift build -c release --product ChatKeeper --triple "$triple" --show-bin-path)/ChatKeeper")
+  swift build -c release --force-resolved-versions --product ChatKeeper --triple "$triple"
+  slices+=("$(swift build -c release --force-resolved-versions --product ChatKeeper --triple "$triple" --show-bin-path)/ChatKeeper")
 done
 lipo -create "${slices[@]}" -output "$APP/Contents/MacOS/ChatKeeper"
 

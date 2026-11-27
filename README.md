@@ -15,14 +15,18 @@ Discord and Telegram are planned. Capture never deletes source messages. MIT lic
 ### Homebrew (macOS and Linux)
 
 ```sh
-brew install bitskyai/tap/chatkeeper            # CLI + local server
+brew install bitskyai/tap/chatkeeper            # CLI + local server (formula)
 brew install --cask bitskyai/tap/chatkeeper-app # macOS menu-bar app (bundles the server)
 ```
 
 Run `chatkeeper` to open the local setup wizard, or keep it running in the
 background with `brew services start chatkeeper` and run `chatkeeper` again to
-open the browser UI of the running instance. The tap is
-[bitskyai/homebrew-tap](https://github.com/bitskyai/homebrew-tap).
+open the browser UI of the running instance. Install one or the other for
+day-to-day use: both share the same data folder and instance lock, so the app
+attaches to a running `brew services` server rather than starting a second one.
+Upgrade with `brew upgrade chatkeeper` / `brew upgrade --cask chatkeeper-app`.
+The tap is [bitskyai/homebrew-tap](https://github.com/bitskyai/homebrew-tap) and
+receives stable releases only; prereleases are download-only.
 
 ### Direct download
 
@@ -70,7 +74,16 @@ gh attestation verify chatkeeper_VERSION_linux_amd64.tar.gz --repo bitskyai/chat
 ```
 
 Releases include six archives, SHA256SUMS and per-archive Syft SBOMs. GitHub build
-attestations cover archives, SBOMs and checksums. The image has BuildKit SBOM and
+attestations cover archives, SBOMs and checksums. The macOS app's
+`ChatKeeper-VERSION.dmg` and `.zip` are listed in their own
+`ChatKeeper-VERSION.sha256` (not in SHA256SUMS) and are attested too:
+
+```sh
+shasum -a 256 -c ChatKeeper-VERSION.sha256
+gh attestation verify ChatKeeper-VERSION.dmg --repo bitskyai/chatkeeper
+```
+
+The container image has BuildKit SBOM and
 provenance plus a GitHub attestation. Keyless cosign signing is optional and is
 not enabled; do not expect `.sig` files.
 

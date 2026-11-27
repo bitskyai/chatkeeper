@@ -19,6 +19,24 @@ final class LaunchInfoTests: XCTestCase {
         XCTAssertNil(LaunchInfo(string: "http://127.0.0.1:8787/login?token="))
         XCTAssertNotNil(LaunchInfo(string: "http://localhost:9000/login?token=x\n"))
         XCTAssertNotNil(LaunchInfo(string: "http://[::1]:9000/login?token=x"))
+        XCTAssertNotNil(LaunchInfo(string: "http://127.8.9.10:9000/login?token=x"))
+        // Hostnames that only look like loopback literals.
+        XCTAssertNil(LaunchInfo(string: "http://127.0.0.1.evil.example/login?token=x"))
+        XCTAssertNil(LaunchInfo(string: "http://127.evil.example/login?token=x"))
+        XCTAssertNil(LaunchInfo(string: "http://[::2]:9000/login?token=x"))
+        XCTAssertNil(LaunchInfo(string: "http://128.0.0.1/login?token=x"))
+    }
+
+    func testLoopbackLiterals() {
+        XCTAssertTrue(LaunchInfo.isLoopback("127.0.0.1"))
+        XCTAssertTrue(LaunchInfo.isLoopback("127.255.255.254"))
+        XCTAssertTrue(LaunchInfo.isLoopback("[::1]"))
+        XCTAssertTrue(LaunchInfo.isLoopback("LOCALHOST"))
+        XCTAssertFalse(LaunchInfo.isLoopback("127.0.0.1.nip.io"))
+        XCTAssertFalse(LaunchInfo.isLoopback("127.1"))
+        XCTAssertFalse(LaunchInfo.isLoopback("10.0.0.1"))
+        XCTAssertFalse(LaunchInfo.isLoopback("::"))
+        XCTAssertFalse(LaunchInfo.isLoopback(""))
     }
 
     func testLoginURLWithNext() throws {
@@ -118,5 +136,49 @@ final class ChildCommandTests: XCTestCase {
         XCTAssertEqual(b.append(Data("Open Chat".utf8)), [])
         XCTAssertEqual(b.append(Data("Keeper: x\r\nsecond\nthi".utf8)), ["Open ChatKeeper: x", "second"])
         XCTAssertEqual(b.append(Data("rd\n".utf8)), ["third"])
+    }
+}
+
+final class OwnedChildTests: XCTestCase {
+    let bundled = "/Applications/ChatKeeper.app/Contents/Resources/chatkeeper"
+
+    func testRoundTripAndClear() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = OwnedChild.url(home: dir)
+        XCTAssertNil(OwnedChild.load(from: url))
+        let record = OwnedChild(pid: 4242, identity: ProcessIdentity(executable: bundled, startMicros: 1_700_000_000_000_001))
+        try record.save(to: url)
+        XCTAssertEqual(OwnedChild.load(from: url), record)
+        let mode = try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(mode?.intValue, 0o600)
+        OwnedChild.clear(at: url, pid: 9999) // a different child: keep
+        XCTAssertEqual(OwnedChild.load(from: url), record)
+        OwnedChild.clear(at: url, pid: 4242)
+        XCTAssertNil(OwnedChild.load(from: url))
+    }
+
+    func testStaleOwnedChildDecision() {
+        let id = ProcessIdentity(executable: bundled, startMicros: 100)
+        let record = OwnedChild(pid: 4242, identity: id)
+        // Same process still alive: the previous app instance's server.
+        XCTAssertTrue(record.isStillOurs(current: id))
+        // Gone, or the pid was reused by another process.
+        XCTAssertFalse(record.isStillOurs(current: nil))
+        XCTAssertFalse(record.isStillOurs(current: ProcessIdentity(executable: bundled, startMicros: 101)))
+        XCTAssertFalse(record.isStillOurs(current: ProcessIdentity(executable: "/bin/zsh", startMicros: 100)))
+        // A CLI or brew-services chatkeeper is never "ours".
+        let cli = ProcessIdentity(executable: "/opt/homebrew/bin/chatkeeper", startMicros: 100)
+        XCTAssertFalse(OwnedChild(pid: 4242, identity: cli).isStillOurs(current: cli))
+        // Never signal init/launchd or invalid pids.
+        XCTAssertFalse(OwnedChild(pid: 1, identity: id).isStillOurs(current: id))
+        XCTAssertFalse(OwnedChild(pid: 0, identity: id).isStillOurs(current: id))
+    }
+
+    func testLauncherEnvironment() {
+        let env = ChildCommand.environment(base: ["PATH": "/usr/bin", "CHATKEEPER_LAUNCHER_PID": "1"], launcherPID: 777)
+        XCTAssertEqual(env["CHATKEEPER_LAUNCHER"], "menubar")
+        XCTAssertEqual(env["CHATKEEPER_LAUNCHER_PID"], "777")
+        XCTAssertEqual(env["PATH"], "/usr/bin")
     }
 }

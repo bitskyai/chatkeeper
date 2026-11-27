@@ -89,20 +89,24 @@ func (a *App) desktopAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// setAllPaused pauses or resumes every workspace, persisting flags the same
-// way the settings page does so the choice survives restarts.
+// setAllPaused pauses or resumes every workspace (explicit state, not a
+// toggle) and persists the flags in one transaction, the same table the
+// settings page uses, so the choice survives restarts. On any failure no
+// workspace changes state.
 func (a *App) setAllPaused(paused bool) error {
-	for _, running := range a.Manager.List() {
-		id := running.Entry.Workspace.ID
-		if running.Paused == paused {
-			continue
-		}
-		if e := a.Manager.Pause(id); e != nil {
+	return a.Manager.SetAllPaused(paused, func(ids []string) error {
+		tx, e := a.db.Begin()
+		if e != nil {
 			return e
 		}
-		_, _ = a.db.Exec("INSERT OR REPLACE INTO workspace_flags(workspace,paused) VALUES(?,?)", id, paused)
-	}
-	return nil
+		for _, id := range ids {
+			if _, e = tx.Exec("INSERT OR REPLACE INTO workspace_flags(workspace,paused) VALUES(?,?)", id, paused); e != nil {
+				_ = tx.Rollback()
+				return e
+			}
+		}
+		return tx.Commit()
+	})
 }
 
 func (a *App) desktopStatus(now time.Time) desktopStatus {

@@ -114,6 +114,16 @@ func runWeb(home, path, mode, bind, hosts string, noBrowser, dev bool, out io.Wr
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	if gone := defaultLauncherWatch().start(ctx); gone != nil {
+		go func() {
+			select {
+			case reason := <-gone:
+				fmt.Fprintln(os.Stderr, "chatkeeper: "+reason+"; shutting down")
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+	}
 	go app.Watch(ctx)
 	stopReload := watchReload(ctx, app)
 	defer stopReload()
