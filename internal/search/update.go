@@ -117,7 +117,10 @@ func (w *workspace) rebuild(ctx context.Context, force bool) error {
 	})
 }
 func fingerprint(v *pluginapi.Snapshot) string {
-	b, _ := json.Marshal(v.Manifest)
+	b, _ := json.Marshal(struct {
+		Manifest pluginapi.ArchiveManifest
+		Messages []pluginapi.Message
+	}{v.Manifest, v.Messages})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }

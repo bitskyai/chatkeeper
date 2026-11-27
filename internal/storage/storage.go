@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -573,40 +574,6 @@ func comparison(v pluginapi.Snapshot) ([]byte, error) {
 	}
 	return Canonical(v.Documents)
 }
-func (s *Folder) pinned(k pluginapi.Key) (bool, error) {
-	name := "cleanup/" + k.Channel + "_" + k.RootTS + ".json"
-	if _, e := s.root.Lstat(name); os.IsNotExist(e) {
-		return false, nil
-	}
-	if e := s.safe(name); e != nil {
-		return false, e
-	}
-	f, e := s.root.Open(name)
-	if e != nil {
-		return false, e
-	}
-	defer f.Close()
-	b, e := io.ReadAll(io.LimitReader(f, MaxJSON+1))
-	if e != nil || int64(len(b)) > MaxJSON {
-		return false, ErrIntegrity
-	}
-	var j struct {
-		Version int      `json:"version"`
-		Targets []string `json:"targets"`
-		Done    []string `json:"done"`
-		Pending *string  `json:"pending"`
-	}
-	if decode(b, &j) != nil || j.Version != 1 {
-		return false, ErrIntegrity
-	}
-	if len(j.Targets) > 0 && j.Pending == nil && strings.Join(j.Targets, "\x00") == strings.Join(j.Done, "\x00") {
-		return true, nil
-	}
-	if len(j.Done) > 0 || j.Pending != nil {
-		return false, ErrPinned
-	}
-	return false, nil
-}
 func (s *Folder) Save(ctx context.Context, k pluginapi.Key, v pluginapi.Snapshot) (bool, error) {
 	if s.readOnly {
 		return false, ErrIntegrity
@@ -644,6 +611,40 @@ func (s *Folder) Save(ctx context.Context, k pluginapi.Key, v pluginapi.Snapshot
 		return false, ErrIntegrity
 	}
 	if old != nil {
+		if e = s.deletionOverlay(k, old); e != nil {
+			return false, e
+		}
+		if len(old.SourceDeletedAt) > 0 {
+			old.Manifest.Schema = 2
+		}
+		v.Manifest.CleanupProof = old.Manifest.CleanupProof
+		if old.CleanupStatus != "" {
+			var j struct {
+				Proof   string            `json:"proof"`
+				Done    []string          `json:"done"`
+				Deleted map[string]string `json:"source_deleted_at"`
+			}
+			raw, err := (&CleanupView{s}).journal(k)
+			if err != nil {
+				return false, err
+			}
+			if json.Unmarshal(raw, &j) != nil {
+				return false, ErrIntegrity
+			}
+			v.Manifest.CleanupProof = j.Proof
+			v.Messages, e = cloneMessages(v.Messages)
+			if e != nil {
+				return false, e
+			}
+			// A capture may have been fetched before DELETE. A confirmed source
+			// receipt remains authoritative even if that stale capture still has TS.
+			for _, msg := range v.Messages {
+				ts, _ := msg["ts"].(string)
+				if slices.Contains(j.Done, ts) && j.Deleted[ts] != "" {
+					msg["source_deleted_at"] = j.Deleted[ts]
+				}
+			}
+		}
 		v, e = merge(*old, v, time.Now().UTC().Format(time.RFC3339Nano))
 		if e != nil {
 			return false, e
@@ -666,10 +667,7 @@ func (s *Folder) Save(ctx context.Context, k pluginapi.Key, v pluginapi.Snapshot
 		if bytes.Equal(a, b) {
 			return false, nil
 		}
-		skip, e := s.pinned(k)
-		if e != nil || skip {
-			return false, e
-		}
+
 	}
 	parent := path.Dir(target)
 	nonce := make([]byte, 12)

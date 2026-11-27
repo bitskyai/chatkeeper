@@ -67,9 +67,9 @@ func TestCleanupPin(t *testing.T) {
 		wantErr     bool
 		wantChanged bool
 	}{
-		{"progress", map[string]any{"version": 1, "targets": []string{"a", "b"}, "done": []string{"a"}, "pending": nil}, true, false},
-		{"pending", map[string]any{"version": 1, "targets": []string{"a"}, "done": []string{}, "pending": "a"}, true, false},
-		{"completed", map[string]any{"version": 1, "targets": []string{"a"}, "done": []string{"a"}, "pending": nil}, false, false},
+		{"progress", map[string]any{"version": 1, "targets": []string{"a", "b"}, "done": []string{"a"}, "pending": nil}, false, true},
+		{"pending", map[string]any{"version": 1, "targets": []string{"a"}, "done": []string{}, "pending": "a"}, false, true},
+		{"completed", map[string]any{"version": 1, "targets": []string{"a"}, "done": []string{"a"}, "pending": nil}, false, true},
 		{"empty", map[string]any{"version": 1, "targets": []string{"a"}, "done": []string{}, "pending": nil}, false, true},
 		{"invalid", map[string]any{"version": 2}, true, false},
 	} {
@@ -79,6 +79,10 @@ func TestCleanupPin(t *testing.T) {
 			v := fixture(t)
 			s.Save(ctx, key, v)
 			os.Mkdir(filepath.Join(s.path, "cleanup"), 0700)
+			snap, _ := s.Read(ctx, key)
+			if j, ok := tc.journal.(map[string]any); ok {
+				j["proof"] = digest(snap.Documents["manifest.json"])
+			}
 			b, _ := json.Marshal(tc.journal)
 			os.WriteFile(filepath.Join(s.path, "cleanup", key.Channel+"_"+key.RootTS+".json"), b, 0600)
 			v.Documents = nil

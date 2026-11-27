@@ -113,7 +113,14 @@ func TestBrowserCleanupPreviewApply(t *testing.T) {
 	}
 	run(chromedp.SendKeys("input[name=confirm]", "fixture"))
 	click("form[action='/cleanup/apply'] button")
-	run(chromedp.Text("main", &body))
+	// The progress page navigates every two seconds. A JS promise-based poll
+	// is cancelled by navigation, so query each current document independently.
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		e := chromedp.Run(ctx, chromedp.Evaluate(`document.querySelector("main")?.innerText || ""`, &body))
+		if e == nil && strings.Contains(body, "deleted") && !strings.Contains(body, "Cleanup running") {
+			break
+		}
+	}
 	if !strings.Contains(body, "deleted") {
 		t.Fatal(body)
 	}

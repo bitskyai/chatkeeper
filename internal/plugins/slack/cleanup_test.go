@@ -366,3 +366,29 @@ func TestCleanupOfflineBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanupReadRateLimitIsReported(t *testing.T) {
+	for _, method := range []string{"auth.test", "conversations.replies"} {
+		t.Run(method, func(t *testing.T) {
+			d, m := cleanupFixture(t, false, "xoxb-synthetic", func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, method) {
+					w.Header().Set("Retry-After", "0")
+					w.WriteHeader(429)
+					return
+				}
+				io.WriteString(w, `{"ok":true,"team_id":"TFAKE","user_id":"UBOT"}`)
+			})
+			e := d.Verify(context.Background(), m)
+			if method != "auth.test" {
+				if e != nil {
+					t.Fatal(e)
+				}
+				e = d.Check(context.Background(), m, nil, nil)
+			}
+			var ce *pluginapi.CleanupError
+			if !errors.As(e, &ce) || ce.Status != "rate-limited" {
+				t.Fatalf("rate limit hidden: %v", e)
+			}
+		})
+	}
+}

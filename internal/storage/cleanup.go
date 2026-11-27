@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"io"
 	"os"
@@ -15,17 +17,19 @@ import (
 
 func (s *Folder) Path() string { return s.path }
 
-// CleanupView holds the same lock as archive refresh for the entire destructive transaction.
-// Callers must not call Folder methods from inside the callback.
+// CleanupView serializes cleanup runners independently of archive readers/writers.
+// Each operation holds the archive lock only while verifying or publishing locally.
 type CleanupView struct{ s *Folder }
 
 func (s *Folder) WithCleanup(ctx context.Context, fn func(*CleanupView) error) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if e := s.mkdir("cleanup"); e != nil {
+	e := s.mkdir("cleanup")
+	s.mu.Unlock()
+	if e != nil {
 		return e
 	}
-	u, e := lockFiles(ctx, s, "cleanup/lock")
+	// The runner lease never takes the archive lock or the Folder mutex.
+	u, e := cleanupLock(ctx, s)
 	if e != nil {
 		return e
 	}
@@ -33,6 +37,11 @@ func (s *Folder) WithCleanup(ctx context.Context, fn func(*CleanupView) error) e
 	return fn(&CleanupView{s})
 }
 func (v *CleanupView) Read(ctx context.Context, k pluginapi.Key) (*pluginapi.Snapshot, error) {
+	unlock, e := v.s.locked(ctx)
+	if e != nil {
+		return nil, e
+	}
+	defer unlock()
 	target, e := v.s.target(k)
 	if e != nil {
 		return nil, e
@@ -92,6 +101,14 @@ func (v *CleanupView) Read(ctx context.Context, k pluginapi.Key) (*pluginapi.Sna
 	return snap, nil
 }
 func (v *CleanupView) Journal(k pluginapi.Key) ([]byte, error) {
+	unlock, e := v.s.locked(context.Background())
+	if e != nil {
+		return nil, e
+	}
+	defer unlock()
+	return v.journal(k)
+}
+func (v *CleanupView) journal(k pluginapi.Key) ([]byte, error) {
 	if !validKey(k) {
 		return nil, ErrIntegrity
 	}
@@ -114,6 +131,32 @@ func (v *CleanupView) Journal(k pluginapi.Key) ([]byte, error) {
 	return b, nil
 }
 func (v *CleanupView) SaveJournal(k pluginapi.Key, b []byte) error {
+	unlock, e := v.s.locked(context.Background())
+	if e != nil {
+		return e
+	}
+	defer unlock()
+	return v.saveJournal(k, b)
+}
+
+// CompareJournal reserves the exact verified archive before a source mutation.
+func (v *CleanupView) CompareJournal(ctx context.Context, k pluginapi.Key, proof string, b []byte) error {
+	unlock, e := v.s.locked(ctx)
+	if e != nil {
+		return e
+	}
+	defer unlock()
+	target, e := v.s.target(k)
+	if e != nil {
+		return e
+	}
+	snap, e := v.s.read(ctx, k, target)
+	if e != nil || snap == nil || digest(snap.Documents["manifest.json"]) != proof {
+		return errors.New("archive changed before source delete")
+	}
+	return v.saveJournal(k, b)
+}
+func (v *CleanupView) saveJournal(k pluginapi.Key, b []byte) error {
 	if !validKey(k) || len(b) > 1<<20 || v.s.readOnly {
 		return ErrIntegrity
 	}
@@ -143,7 +186,7 @@ func (v *CleanupView) SaveJournal(k pluginapi.Key, b []byte) error {
 
 // Annotate reads only metadata proved against the immutable manifest. It never rewrites content.
 func (s *Folder) deletionOverlay(k pluginapi.Key, snap *pluginapi.Snapshot) error {
-	b, e := (&CleanupView{s}).Journal(k)
+	b, e := (&CleanupView{s}).journal(k)
 	if e != nil {
 		return e
 	}
@@ -154,16 +197,42 @@ func (s *Folder) deletionOverlay(k pluginapi.Key, snap *pluginapi.Snapshot) erro
 		Version int               `json:"version"`
 		Proof   string            `json:"proof"`
 		Done    []string          `json:"done"`
+		Targets []string          `json:"targets"`
+		Pending *string           `json:"pending"`
 		Deleted map[string]string `json:"source_deleted_at"`
 	}
-	if json.Unmarshal(b, &j) != nil || j.Version != 1 || j.Proof != digest(snap.Documents["manifest.json"]) {
+	if json.Unmarshal(b, &j) != nil || j.Version != 1 || (j.Proof != digest(snap.Documents["manifest.json"]) && (snap.Manifest.CleanupProof == "" || j.Proof != snap.Manifest.CleanupProof)) {
 		return ErrIntegrity
 	}
 	snap.SourceDeletedAt = map[string]string{}
+	for _, msg := range snap.Messages {
+		if at, ok := msg["source_deleted_at"].(string); ok {
+			snap.SourceDeletedAt[fmt.Sprint(msg["ts"])] = at
+		}
+	}
+	snap.CleanupStatus = "partial"
+	if len(j.Targets) > 0 && len(j.Done) == len(j.Targets) {
+		snap.CleanupStatus = "cleaned"
+	}
+	if j.Proof != digest(snap.Documents["manifest.json"]) {
+		snap.CleanupStatus = "stale"
+	}
+	if j.Pending != nil {
+		snap.CleanupStatus = "unknown/pending"
+	}
 	for _, ts := range j.Done {
 		if at := j.Deleted[ts]; at != "" {
 			snap.SourceDeletedAt[ts] = at
 		}
+	}
+
+	for _, msg := range snap.Messages {
+		if at := snap.SourceDeletedAt[fmt.Sprint(msg["ts"])]; at != "" {
+			msg["source_deleted_at"] = at
+		}
+	}
+	if len(snap.Messages) > 0 && len(snap.SourceDeletedAt) == len(snap.Messages) && j.Pending == nil {
+		snap.CleanupStatus = "cleaned"
 	}
 	return nil
 }

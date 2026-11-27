@@ -82,8 +82,8 @@ func TestCleanupKeepsArchiveAfterRefresh(t *testing.T) {
 	if len(after.Messages) != 3 || len(after.SourceDeletedAt) != 3 {
 		t.Fatalf("archive shrank or unmarked: %+v", after)
 	}
-	if string(after.Documents["manifest.json"]) != string(before.Documents["manifest.json"]) {
-		t.Fatal("proof changed")
+	if after.Messages[2]["source_deleted_at"] == nil {
+		t.Fatal("receipt lost")
 	}
 	Run(ctx, w, s, d, true)
 	if len(d.calls) != 3 {
@@ -131,7 +131,7 @@ func TestUnknownDeletePendingResume(t *testing.T) {
 	w, s := fixture(t)
 	d := &driver{fail: true}
 	r := Run(context.Background(), w, s, d, true)
-	if r.Threads[0].Status != "blocked" || len(d.calls) != 1 {
+	if r.Threads[0].Status != "unknown/pending" || len(d.calls) != 1 {
 		t.Fatalf("%+v", r)
 	}
 	d.fail = false
@@ -153,7 +153,7 @@ func TestGuardRehashesAfterLiveRead(t *testing.T) {
 }
 func TestJournalRejectsInvalidProgress(t *testing.T) {
 	targets := []string{"reply", "root"}
-	for _, raw := range []string{`{"version":1}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":["root"],"pending":null}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":[],"pending":"root"}`, `{"version":1,"proof":"other","targets":["reply","root"],"done":[],"pending":null}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":null,"pending":null}`} {
+	for _, raw := range []string{`{"version":1}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":["reply","reply"],"pending":null}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":[],"pending":"foreign"}`, `{"version":1,"proof":"other","targets":["reply","root"],"done":[],"pending":null}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":null,"pending":null}`} {
 		if _, e := readJournal([]byte(raw), "p", targets); e == nil {
 			t.Fatal("accepted malformed journal", raw)
 		}
@@ -181,7 +181,7 @@ func TestCleanupLockBlocksConcurrentRunner(t *testing.T) {
 	r := Run(ctx, w, other, d, true)
 	close(release)
 	<-done
-	if len(d.calls) != 0 || r.Reason == "" {
+	if len(d.calls) != 0 || r.Threads[0].Reason == "" {
 		t.Fatalf("lock bypass %+v", r)
 	}
 }
@@ -214,8 +214,8 @@ func TestCleanupPinnedPendingAndProof(t *testing.T) {
 	fresh.Documents = nil
 	fresh.Messages = append([]pluginapi.Message{}, snap.Messages...)
 	fresh.Messages[0] = pluginapi.Message{"ts": k.RootTS, "user": "UOWN", "text": "changed", "reply_count": 2}
-	if _, e := s.Save(context.Background(), k, fresh); !errors.Is(e, storage.ErrPinned) {
-		t.Fatal("partial snapshot not pinned", e)
+	if _, e := s.Save(context.Background(), k, fresh); e != nil {
+		t.Fatal("partial snapshot did not reconcile", e)
 	}
 	p := filepath.Join(s.Path(), "archive/CFAKE/"+k.RootTS+"/manifest.json")
 	b, _ := os.ReadFile(p)
@@ -328,5 +328,213 @@ func TestDryRunNoDriverCalls(t *testing.T) {
 		if result.Status != "dry-run" || result.Reason == "" {
 			t.Fatal(result)
 		}
+	}
+}
+
+func TestApplyBoundRejectsDeferredApproval(t *testing.T) {
+	w, s := fixture(t)
+	preview := Run(context.Background(), w, s, nil, false)
+	preview.Threads[0].Status = "deferred"
+	d := &driver{}
+	RunResult := ApplyBound(context.Background(), w, s, d, preview)
+	if len(d.calls) != 0 || RunResult.Threads[0].Status != "blocked" {
+		t.Fatal(RunResult)
+	}
+	// A deferred preview must never become permission across the age boundary.
+	w.Cleanup.MinAge = time.Hour
+	realAge := threadAge
+	defer func() { threadAge = realAge }()
+	calls := 0
+	threadAge = func(time.Time) time.Duration {
+		calls++
+		if calls <= 2 {
+			return 0
+		}
+		return 2 * time.Hour
+	}
+	preview = Run(context.Background(), w, s, nil, false)
+	r := ApplyBound(context.Background(), w, s, d, preview)
+	if len(d.calls) != 0 || r.Threads[0].Status != "blocked" {
+		t.Fatal(r, d.calls)
+	}
+
+}
+
+func TestCleanupNewReplyReconciles(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		t.Run(fmt.Sprint(partial), func(t *testing.T) {
+			w, s := fixture(t)
+			ctx := context.Background()
+			k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+			before, _ := s.Read(ctx, k)
+			d := &driver{}
+			if partial {
+				d.check = func() error {
+					if len(d.calls) == 1 {
+						return errors.New("stop")
+					}
+					return nil
+				}
+			}
+			Run(ctx, w, s, d, true)
+			after, e := s.Read(ctx, k)
+			if e != nil {
+				t.Fatal(e)
+			}
+			n := 3
+			if partial {
+				n = 1
+			}
+			marked := 0
+			for _, m := range after.Messages {
+				if m["source_deleted_at"] != nil {
+					marked++
+				}
+			}
+			if marked != n {
+				t.Fatalf("projected markers=%d want %d", marked, n)
+			}
+			fresh := *before
+			fresh.Documents = nil
+			fresh.Messages = append([]pluginapi.Message{}, before.Messages...)
+			if partial {
+				fresh.Messages = fresh.Messages[:2]
+			} else {
+				fresh.Messages = nil
+			}
+			fresh.Messages = append(fresh.Messages, pluginapi.Message{"ts": "1000000003.000001", "thread_ts": k.RootTS, "user": "UOWN", "text": "new activity"})
+			if !partial {
+				fresh.Messages = append([]pluginapi.Message{before.Messages[0]}, fresh.Messages...)
+			}
+			fresh.Messages[0] = pluginapi.Message{"ts": k.RootTS, "user": "UOWN", "text": "root", "reply_count": 1, "reactions": before.Messages[0]["reactions"]}
+			fresh.Manifest.MessageCount = len(fresh.Messages)
+			fresh.Manifest.Schema = 2
+			if _, e = s.Save(ctx, k, fresh); e != nil {
+				t.Fatal("refresh", e)
+			}
+			got, e := s.Read(ctx, k)
+			if e != nil || len(got.Messages) != 4 {
+				t.Fatalf("reply lost: %v %+v", e, got)
+			}
+			if got.Messages[2]["source_deleted_at"] == nil {
+				t.Fatal("deleted reply marker lost")
+			}
+		})
+	}
+}
+
+func TestCleanupNetworkDoesNotHoldArchiveLock(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	d := &driver{check: func() error {
+		readCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+		other, e := storage.Open(s.Path())
+		if e != nil {
+			return e
+		}
+		defer other.Close()
+		_, e = other.Read(readCtx, k)
+		return e
+	}}
+	r := Run(ctx, w, s, d, true)
+	if len(d.calls) != 3 {
+		t.Fatal(r)
+	}
+}
+
+func TestRateLimitStopsRemainingThreads(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	snap, _ := s.Read(ctx, k)
+	next := *snap
+	next.Documents = nil
+	next.Manifest.RootTS = "1000000010.000001"
+	next.Messages = []pluginapi.Message{{"ts": next.Manifest.RootTS, "user": "UOWN", "text": "other", "reactions": snap.Messages[0]["reactions"]}}
+	next.Manifest.MessageCount = 1
+	if _, e := s.Save(ctx, pluginapi.Key{Channel: k.Channel, RootTS: next.Manifest.RootTS}, next); e != nil {
+		t.Fatal(e)
+	}
+	d := &driver{deleteErr: &pluginapi.CleanupError{Status: "rate-limited", Reason: "exhausted"}}
+	r := Run(ctx, w, s, d, true)
+	if len(d.calls) != 1 || len(r.Threads) != 1 || r.Reason == "" {
+		t.Fatal(r, d.calls)
+	}
+}
+
+func TestFullyCleanedPreview(t *testing.T) {
+	w, s := fixture(t)
+	Run(context.Background(), w, s, &driver{}, true)
+	r := Run(context.Background(), w, s, nil, false)
+	if r.Threads[0].Status != "cleaned" {
+		t.Fatal(r)
+	}
+}
+
+func TestPendingReceiptReconcilesAfterRefresh(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	before, _ := s.Read(ctx, k)
+	d := &driver{fail: true}
+	Run(ctx, w, s, d, true)
+	preview := Run(ctx, w, s, nil, false)
+	if preview.Threads[0].Status != "unknown/pending" || preview.Threads[0].Results[0].Status != "unknown/pending" {
+		t.Fatal(preview)
+	}
+	// The API delete succeeded but its response/receipt was lost. A complete
+	// source refresh now proves that pending message absent.
+	fresh := *before
+	fresh.Documents = nil
+	fresh.Messages = append([]pluginapi.Message{}, before.Messages[:2]...)
+	fresh.Manifest.Schema = 2
+	fresh.Manifest.MessageCount = 2
+	fresh.Messages[0] = pluginapi.Message{"ts": k.RootTS, "user": "UOWN", "text": "root", "reply_count": 1, "reactions": before.Messages[0]["reactions"]}
+	if _, e := s.Save(ctx, k, fresh); e != nil {
+		t.Fatal(e)
+	}
+	d.fail = false
+	r := Run(ctx, w, s, d, true)
+	if r.Threads[0].Status != "deleted" || len(d.calls) != 3 {
+		t.Fatal(r, d.calls)
+	}
+	got, e := s.Read(ctx, k)
+	if e != nil || len(got.SourceDeletedAt) != 3 {
+		t.Fatal("lost receipts", e)
+	}
+}
+
+func TestConfirmedReceiptsSurviveStaleCapture(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	fetched, _ := s.Read(ctx, k)
+	d := &driver{}
+	Run(ctx, w, s, d, true)
+	// Capture fetched these messages before deletion but publishes after receipts.
+	fetched.Documents = nil
+	if _, e := s.Save(ctx, k, *fetched); e != nil {
+		t.Fatal(e)
+	}
+	got, e := s.Read(ctx, k)
+	if e != nil || len(got.SourceDeletedAt) != 3 {
+		t.Fatal("stale capture erased confirmed deletion", e, got.SourceDeletedAt)
+	}
+	for _, msg := range got.Messages {
+		if msg["source_deleted_at"] == nil {
+			t.Fatal("confirmed marker disappeared", msg)
+		}
+	}
+	fetched.Messages = append(fetched.Messages, pluginapi.Message{"ts": "1000000003.000001", "user": "UOWN", "thread_ts": k.RootTS, "text": "later activity"})
+	fetched.Manifest.MessageCount = 4
+	fetched.Messages[0] = pluginapi.Message{"ts": k.RootTS, "user": "UOWN", "text": "root", "reply_count": 3, "reactions": fetched.Messages[0]["reactions"]}
+	if _, e = s.Save(ctx, k, *fetched); e != nil {
+		t.Fatal(e)
+	}
+	r := Run(ctx, w, s, d, true)
+	if r.Threads[0].Status != "deleted" || len(d.calls) != 4 {
+		t.Fatal("confirmed receipts lost during rebase", r, d.calls)
 	}
 }

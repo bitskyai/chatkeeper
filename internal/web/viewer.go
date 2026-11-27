@@ -50,9 +50,9 @@ func New(sources map[string]Source, token string) *Viewer {
 type row struct{ URL, Label string }
 type message struct{ TS, Author, Text, SourceDeletedAt string }
 type threadPage struct {
-	Title, Back, Permalink string
-	Messages               []message
-	Files                  []row
+	Title, Back, Permalink, CleanupStatus string
+	Messages                              []message
+	Files                                 []row
 }
 
 func (v *Viewer) ServeHTTP(w http.ResponseWriter, r *http.Request) { v.serveHTTP(w, r, v.sources) }
@@ -116,7 +116,7 @@ func (v *Viewer) serveHTTP(w http.ResponseWriter, r *http.Request, sources map[s
 			if e = core.Guard(ctx, 10*time.Second, func(c context.Context) error { return source.Content.Validate(c, *snapshot) }); e != nil {
 				continue
 			}
-			rows = append(rows, row{URL: "/view/" + parts[1] + "/" + url.PathEscape(k.Channel) + "/" + url.PathEscape(k.RootTS), Label: k.Channel + " / " + k.RootTS})
+			rows = append(rows, row{URL: "/view/" + parts[1] + "/" + url.PathEscape(k.Channel) + "/" + url.PathEscape(k.RootTS), Label: k.Channel + " / " + k.RootTS + cleanupLabel(snapshot)})
 		}
 		v.render(w, "index", rows)
 		return
@@ -167,7 +167,7 @@ func (v *Viewer) serveHTTP(w http.ResponseWriter, r *http.Request, sources map[s
 	for id, u := range snapshot.Users {
 		users[id] = u
 	}
-	page := threadPage{Back: "/view/" + parts[1] + "/", Permalink: snapshot.Manifest.Permalink}
+	page := threadPage{Back: "/view/" + parts[1] + "/", Permalink: snapshot.Manifest.Permalink, CleanupStatus: snapshot.CleanupStatus}
 	for _, m := range snapshot.Messages {
 		text, e := core.Call(ctx, 10*time.Second, func(c context.Context) (string, error) { return source.Content.Text(c, m, users) })
 		if e != nil {
@@ -253,4 +253,11 @@ func (v *Viewer) mentionUsers(ctx context.Context, id string, source Source) map
 		users[uid] = user
 	}
 	return users
+}
+
+func cleanupLabel(s *pluginapi.Snapshot) string {
+	if s == nil || s.CleanupStatus == "" {
+		return ""
+	}
+	return " · cleanup: " + s.CleanupStatus
 }

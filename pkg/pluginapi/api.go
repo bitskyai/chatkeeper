@@ -108,6 +108,8 @@ type Attachment struct {
 	URL    string `json:"url"`
 }
 type ArchiveManifest struct {
+	// CleanupProof links this generation to the journal whose receipts it folded.
+	CleanupProof string            `json:"cleanup_proof,omitempty"`
 	Schema       int               `json:"schema"`
 	Platform     string            `json:"platform,omitempty"`
 	TeamID       string            `json:"team_id"`
@@ -119,7 +121,9 @@ type ArchiveManifest struct {
 	Files        []Attachment      `json:"files"`
 }
 type Snapshot struct {
-	// SourceDeletedAt is a durable journal overlay; original object bytes remain immutable.
+	// CleanupStatus summarizes the journal state for archive readers.
+	CleanupStatus string `json:"cleanup_status,omitempty"`
+	// SourceDeletedAt projects verified journal and persisted deletion markers.
 	SourceDeletedAt map[string]string `json:"source_deleted_at,omitempty"`
 	Manifest        ArchiveManifest
 	Messages        []Message

@@ -178,9 +178,18 @@ func TestCleanupPolicyDefaultsAndOptIn(t *testing.T) {
 	if !p.Enabled || !p.AllowOthers || !p.OwnOnly || p.MinAge.Hours() != 48 || p.TokenEnv != "FIXTURE_CLEANUP_TOKEN" {
 		t.Fatal(p)
 	}
-	for _, value := range []string{"{enabled: 1}", "{own_only: 1}", "{allow_others: yes}", "{min_age_hours: -1}", "{min_age_hours: .inf}", "{token_env: '../secret'}"} {
+	for _, value := range []string{"{enabled: 1}", "{own_only: 1}", "{allow_others: yes}", "{min_age_hours: -1}", "{min_age_hours: 1e-20}", "{allow_zero_age: 1}", "{min_age_hours: .inf}", "{token_env: '../secret'}"} {
 		if _, e := load(t, valid+"    cleanup: "+value+"\n", false); e == nil {
 			t.Fatal("accepted unsafe policy", value)
 		}
+	}
+}
+
+func TestCleanupZeroAgeRequiresExplicitOptIn(t *testing.T) {
+	if _, e := load(t, valid+"    cleanup: {min_age_hours: 0}\n", false); e == nil {
+		t.Fatal("zero age accepted without opt-in")
+	}
+	if _, e := load(t, valid+"    cleanup: {min_age_hours: 0, allow_zero_age: true}\n", false); e != nil {
+		t.Fatal(e)
 	}
 }

@@ -18,12 +18,13 @@ import (
 type cleanupPage struct {
 	CSRF, Workspace, Digest string
 	Enabled                 bool
+	Running                 bool
 	Report                  *cleanup.Report
 	Workspaces              []string
 	Logs                    []string
 }
 
-var cleanupTemplate = template.Must(template.New("cleanup").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cleanup · ChatKeeper</title><link rel="stylesheet" href="/static/app.css"></head><body><header><a href="/">ChatKeeper</a><nav><a href="/settings/">Settings</a></nav></header><main><h1>Cleanup</h1><p>Cleanup is off by default. Preview checks your archive offline. Apply verifies live identity and every message before deleting from the source. Your archive stays preserved.</p>{{range .Workspaces}}<p><a href="/cleanup/?workspace={{.}}">{{.}}</a></p>{{end}}{{if .Workspace}}<h2>{{.Workspace}}</h2><p>Enabled: {{.Enabled}}</p><form method="post" action="/cleanup/enable"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="workspace" value="{{.Workspace}}"><label>Enable cleanup<input type="checkbox" name="enabled" value="true" {{if .Enabled}}checked{{end}}></label><button>Save workspace preference</button></form><form method="post" action="/cleanup/preview"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="workspace" value="{{.Workspace}}"><button>Preview dry-run</button></form>{{end}}{{with .Report}}<h2>Report</h2>{{if .Reason}}<p>{{.Reason}}</p>{{end}}<table><thead><tr><th>Channel / thread</th><th>Message</th><th>Status</th><th>Reason</th></tr></thead><tbody>{{range .Threads}}<tr><td>{{.Channel}} / {{.RootTS}}</td><td>Thread</td><td>{{.Status}}</td><td>{{.Reason}}</td></tr>{{range .Results}}<tr><td></td><td>{{.TS}}</td><td>{{.Status}}</td><td>{{.Reason}}</td></tr>{{end}}{{end}}</tbody></table>{{end}}{{if .Digest}}<form method="post" action="/cleanup/apply"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="workspace" value="{{.Workspace}}"><input type="hidden" name="digest" value="{{.Digest}}"><label>Type workspace id to confirm deletion<input name="confirm" required autocomplete="off"></label><label>Administrator password (server mode)<input name="password" type="password" autocomplete="current-password"></label><button class="danger">Apply source deletions</button></form>{{end}}<h2>Results log</h2>{{range .Logs}}<pre>{{.}}</pre>{{else}}<p>No cleanup runs yet.</p>{{end}}</main></body></html>`))
+var cleanupTemplate = template.Must(template.New("cleanup").Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cleanup · ChatKeeper</title>{{if .Running}}<meta http-equiv="refresh" content="2">{{end}}<link rel="stylesheet" href="/static/app.css"></head><body><header><a href="/">ChatKeeper</a><nav><a href="/settings/">Settings</a></nav></header><main><h1>Cleanup</h1><p>Cleanup is off by default. Preview checks your archive offline. Apply verifies live identity and every message before deleting from the source. Your archive stays preserved.</p>{{range .Workspaces}}<p><a href="/cleanup/?workspace={{.}}">{{.}}</a></p>{{end}}{{if .Workspace}}<h2>{{.Workspace}}</h2><p>Enabled: {{.Enabled}}</p><form method="post" action="/cleanup/enable"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="workspace" value="{{.Workspace}}"><label>Enable cleanup<input type="checkbox" name="enabled" value="true" {{if .Enabled}}checked{{end}}></label><button>Save workspace preference</button></form><form method="post" action="/cleanup/preview"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="workspace" value="{{.Workspace}}"><button>Preview dry-run</button></form>{{end}}{{with .Report}}<h2>Report</h2>{{if .Reason}}<p>{{.Reason}}</p>{{end}}<table><thead><tr><th>Channel / thread</th><th>Message</th><th>Status</th><th>Reason</th></tr></thead><tbody>{{range .Threads}}<tr><td>{{.Channel}} / {{.RootTS}}</td><td>Thread</td><td>{{.Status}}</td><td>{{.Reason}}</td></tr>{{range .Results}}<tr><td></td><td>{{.TS}}</td><td>{{.Status}}</td><td>{{.Reason}}</td></tr>{{end}}{{end}}</tbody></table>{{end}}{{if .Digest}}<form method="post" action="/cleanup/apply"><input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="workspace" value="{{.Workspace}}"><input type="hidden" name="digest" value="{{.Digest}}"><label>Type workspace id to confirm deletion<input name="confirm" required autocomplete="off"></label><label>Administrator password (server mode)<input name="password" type="password" autocomplete="current-password"></label><button class="danger">Apply source deletions</button></form>{{end}}{{if .Running}}<p role="status">Cleanup running. Progress refreshes every 2 seconds; you can leave this page.</p>{{end}}<h2>Results log</h2>{{range .Logs}}<pre>{{.}}</pre>{{else}}<p>No cleanup runs yet.</p>{{end}}</main></body></html>`))
 
 func policyDigest(w pluginapi.Workspace) string {
 	b, _ := json.Marshal(w)
@@ -145,29 +146,57 @@ func (a *App) cleanupPage(w http.ResponseWriter, r *http.Request, session, csrf 
 					http.Error(w, "Cannot resolve cleanup credential", http.StatusConflict)
 					return
 				}
-				d, e := entry.Plugin.NewCleanupDriver(r.Context(), ws, pluginapi.Env{Credentials: pluginapi.Credentials{"cleanup_token": token}, HTTP: a.opts.HTTP})
+				d, e := entry.Plugin.NewCleanupDriver(a.ctx, ws, pluginapi.Env{Credentials: pluginapi.Credentials{"cleanup_token": token}, HTTP: a.opts.HTTP})
 				if e != nil {
 					http.Error(w, "Cleanup credential unavailable or invalid", http.StatusConflict)
 					return
 				}
-				report := cleanup.ApplyBound(r.Context(), ws, s, d, approved)
-				pg.Report = &report
-				b, _ := json.Marshal(report)
-				if _, e = a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report) VALUES(?,unixepoch(),?)", id, string(b)); e != nil {
-					http.Error(w, "Run completed; cannot save audit copy (journal retained)", http.StatusInternalServerError)
+				starting, _ := json.Marshal(cleanup.Report{Workspace: id, Reason: "Starting cleanup"})
+				result, e := a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) VALUES(?,unixepoch(),?,'running')", id, string(starting))
+				if e != nil {
+					http.Error(w, "Cannot start cleanup", 500)
 					return
 				}
+				runID, _ := result.LastInsertId()
+				a.cleanupJobs.Add(1)
+				go func() {
+					defer a.cleanupJobs.Done()
+					store, err := storage.Open(ws.Storage)
+					report := cleanup.Report{Workspace: id, Reason: "Archive unavailable"}
+					if err == nil {
+						defer store.Close()
+						report = cleanup.ApplyBoundProgress(a.ctx, ws, store, d, approved, func(progress cleanup.Report) {
+							if a.Manager.Search != nil && len(progress.Threads) > 0 {
+								thread := progress.Threads[len(progress.Threads)-1]
+								_ = a.Manager.Search.Sync(a.ctx, id, pluginapi.Key{Channel: thread.Channel, RootTS: thread.RootTS})
+							}
+							b, _ := json.Marshal(progress)
+							_, _ = a.db.Exec("UPDATE cleanup_runs SET report=? WHERE id=?", string(b), runID)
+						})
+					}
+					b, _ := json.Marshal(report)
+					_, _ = a.db.Exec("UPDATE cleanup_runs SET report=?,status='complete' WHERE id=?", string(b), runID)
+				}()
+				http.Redirect(w, r, "/cleanup/?workspace="+id, http.StatusSeeOther)
+				return
 			}
 		default:
 			http.NotFound(w, r)
 			return
 		}
 	}
-	rows, e := a.db.Query("SELECT report FROM cleanup_runs ORDER BY id DESC LIMIT 20")
+	rows, e := a.db.Query("SELECT report,status FROM cleanup_runs ORDER BY id DESC LIMIT 20")
 	if e == nil {
 		for rows.Next() {
-			var b string
-			if rows.Scan(&b) == nil {
+			var b, status string
+			if rows.Scan(&b, &status) == nil {
+				if status == "running" {
+					pg.Running = true
+				}
+				var report cleanup.Report
+				if pg.Report == nil && json.Unmarshal([]byte(b), &report) == nil && (id == "" || report.Workspace == id) {
+					pg.Report = &report
+				}
 				pg.Logs = append(pg.Logs, b)
 			}
 		}

@@ -50,6 +50,7 @@ type App struct {
 	ctx              context.Context
 	cancel           context.CancelFunc
 	maintenanceDone  chan struct{}
+	cleanupJobs      sync.WaitGroup
 	mu, authMu       sync.Mutex
 	viewerMu         sync.Mutex
 	attempts         map[string]attempts
@@ -189,6 +190,7 @@ func NewApp(o Options) (*App, error) {
 	if _, e = os.Stat(o.Config); e == nil {
 		_ = a.Manager.Reload()
 	}
+	_, _ = a.db.Exec("UPDATE cleanup_runs SET status='interrupted' WHERE status='running'")
 	a.maintenanceDone = make(chan struct{})
 	go a.maintain()
 	return a, nil
@@ -198,6 +200,7 @@ func (a *App) Close() {
 	if a.maintenanceDone != nil {
 		<-a.maintenanceDone
 	}
+	a.cleanupJobs.Wait()
 	a.Manager.Close()
 	_ = a.db.Close()
 }
@@ -824,13 +827,18 @@ func (a *App) archiveRows(workspace string) []row {
 			continue
 		}
 		keys, e := store.Keys(a.ctx)
-		_ = store.Close()
 		if e != nil {
+			_ = store.Close()
 			continue
 		}
 		for _, k := range keys {
-			rows = append(rows, row{URL: "/view/" + wid + "/" + k.Channel + "/" + k.RootTS, Label: wid + " · " + k.Channel + " / " + k.RootTS})
+			snap, err := store.Read(a.ctx, k)
+			if err != nil {
+				continue
+			}
+			rows = append(rows, row{URL: "/view/" + wid + "/" + k.Channel + "/" + k.RootTS, Label: wid + " · " + k.Channel + " / " + k.RootTS + cleanupLabel(snap)})
 		}
+		_ = store.Close()
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].URL > rows[j].URL })
 	if len(rows) > 30 {

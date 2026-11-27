@@ -45,6 +45,8 @@ type journal struct {
 	Deleted map[string]string `json:"source_deleted_at,omitempty"`
 }
 
+var threadAge = time.Since
+
 func hash(b []byte) string   { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 func Digest(r Report) string { b, _ := json.Marshal(r); return hash(b) }
 func readJournal(b []byte, proof string, targets []string) (*journal, error) {
@@ -62,7 +64,7 @@ func readJournal(b []byte, proof string, targets []string) (*journal, error) {
 		}
 	}
 	j = &journal{}
-	if json.Unmarshal(b, j) != nil || j.Version != 1 || j.Done == nil || j.Targets == nil || j.Proof != proof || !slices.Equal(j.Targets, targets) || len(j.Done) > len(targets) || !slices.Equal(j.Done, targets[:len(j.Done)]) || j.Pending != nil && (len(j.Done) == len(targets) || *j.Pending != targets[len(j.Done)]) {
+	if json.Unmarshal(b, j) != nil || j.Version != 1 || j.Done == nil || j.Targets == nil || j.Proof != proof || !slices.Equal(j.Targets, targets) || len(j.Done) > len(targets) || !validProgress(j, targets) {
 		return nil, errors.New("invalid cleanup journal or archive proof changed")
 	}
 	if j.Deleted == nil {
@@ -71,16 +73,30 @@ func readJournal(b []byte, proof string, targets []string) (*journal, error) {
 	return j, nil
 }
 
-// Run performs no driver calls during preview. Apply keeps the storage lock across all guards and mutations.
-func Run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d pluginapi.CleanupDriver, apply bool) Report {
-	return run(ctx, w, s, d, apply, nil)
+func validProgress(j *journal, targets []string) bool {
+	seen := map[string]bool{}
+	for _, ts := range j.Done {
+		if seen[ts] || !slices.Contains(targets, ts) {
+			return false
+		}
+		seen[ts] = true
+	}
+	return j.Pending == nil || slices.Contains(targets, *j.Pending) && !seen[*j.Pending]
+}
+
+// Run performs no driver calls during preview. Network calls never hold archive locks.
+func Run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d pluginapi.CleanupDriver, apply bool, progress ...func(Report)) Report {
+	return run(ctx, w, s, d, apply, nil, progress...)
 }
 
 // ApplyBound refuses any snapshot proof absent from the approved offline preview.
 func ApplyBound(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d pluginapi.CleanupDriver, preview Report) Report {
 	return run(ctx, w, s, d, true, &preview)
 }
-func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d pluginapi.CleanupDriver, apply bool, expected *Report) Report {
+func ApplyBoundProgress(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d pluginapi.CleanupDriver, preview Report, progress func(Report)) Report {
+	return run(ctx, w, s, d, true, &preview, progress)
+}
+func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d pluginapi.CleanupDriver, apply bool, expected *Report, progress ...func(Report)) Report {
 	r := Report{Workspace: w.ID, Enabled: w.Cleanup.Enabled, Applied: w.Cleanup.Enabled && apply, Threads: []Thread{}}
 	if !w.Cleanup.Enabled {
 		r.Reason = "cleanup disabled"
@@ -105,7 +121,7 @@ func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d plugin
 				}
 				approved := false
 				for _, old := range expected.Threads {
-					if old.Channel == k.Channel && old.RootTS == k.RootTS && old.Proof == fresh.Proof && old.Status == fresh.Status {
+					if old.Channel == k.Channel && old.RootTS == k.RootTS && old.Proof == fresh.Proof && old.Status == "dry-run" && fresh.Status == "dry-run" {
 						approved = true
 					}
 				}
@@ -117,6 +133,14 @@ func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d plugin
 		})
 		if e != nil {
 			t.Reason = e.Error()
+			if t.Status == "blocked" {
+				for _, result := range t.Results {
+					if result.Status == "deleted" {
+						t.Status = "partial"
+						break
+					}
+				}
+			}
 			var ce *pluginapi.CleanupError
 			if errors.As(e, &ce) {
 				t.Status = ce.Status
@@ -128,6 +152,13 @@ func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d plugin
 			}
 		}
 		r.Threads = append(r.Threads, t)
+		for _, notify := range progress {
+			notify(r)
+		}
+		if t.Status == "rate-limited" {
+			r.Reason = "rate limit exhausted; remaining threads skipped"
+			break
+		}
 	}
 	for _, f := range s.Failures() {
 		found := false
@@ -192,6 +223,38 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 	if e != nil {
 		return errors.New("invalid cleanup journal")
 	}
+	// A refresh folds confirmed receipts into schema-2 messages and records
+	// the old proof in its manifest. Rebase only that verified journal.
+	rebased := false
+	if b != nil && snap.Manifest.CleanupProof != "" {
+		var prior journal
+		if json.Unmarshal(b, &prior) != nil {
+			return errors.New("invalid cleanup journal")
+		}
+		if prior.Proof != t.Proof && prior.Proof == snap.Manifest.CleanupProof {
+			prior.Proof = t.Proof
+			prior.Targets = targets
+			confirmed := append([]string{}, prior.Done...)
+			prior.Done = []string{}
+			if prior.Deleted == nil {
+				prior.Deleted = map[string]string{}
+			}
+			rebased = true
+			for _, msg := range ordered {
+				if msg["source_deleted_at"] != nil || slices.Contains(confirmed, fmt.Sprint(msg["ts"])) {
+					ts := fmt.Sprint(msg["ts"])
+					prior.Done = append(prior.Done, ts)
+					if at, ok := msg["source_deleted_at"].(string); ok {
+						prior.Deleted[ts] = at
+					}
+				}
+			}
+			if prior.Pending != nil && slices.Contains(prior.Done, *prior.Pending) {
+				prior.Pending = nil
+			}
+			b, _ = json.Marshal(prior)
+		}
+	}
 	j, e := readJournal(b, t.Proof, targets)
 	if e != nil {
 		return e
@@ -212,7 +275,27 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 			}
 		}
 	}
-	if time.Since(newest) < w.Cleanup.MinAge {
+	if apply && rebased {
+		rebasedBytes, _ := json.Marshal(j)
+		if e = v.CompareJournal(ctx, k, t.Proof, rebasedBytes); e != nil {
+			return e
+		}
+	}
+	if !apply && j.Pending != nil {
+		t.Status = "unknown/pending"
+		t.Reason = "unresolved source deletion; refresh archive or resume cleanup from CLI"
+		for i := range t.Results {
+			if t.Results[i].TS == *j.Pending {
+				t.Results[i].Status = "unknown/pending"
+			}
+		}
+		return nil
+	}
+	if len(j.Done) == len(targets) {
+		t.Status = "cleaned"
+		return nil
+	}
+	if threadAge(newest) < w.Cleanup.MinAge {
 		t.Status = "deferred"
 		t.Reason = "thread is too recent"
 		for i := range t.Results {
@@ -231,7 +314,7 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 		return nil
 	}
 	if len(j.Done) == len(targets) {
-		t.Status = "deleted"
+		t.Status = "cleaned"
 		return nil
 	}
 	if d == nil {
@@ -301,10 +384,16 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 		}
 		ts := targets[i]
 		j.Pending = &ts
-		if e = save(); e != nil {
+		pendingBytes, _ := json.Marshal(j)
+		if e = v.CompareJournal(ctx, k, j.Proof, pendingBytes); e != nil {
 			return e
 		}
+		t.Status = "unknown/pending"
+		t.Results[i].Status = "unknown/pending"
 		if e = d.Delete(ctx, m, msg); e != nil {
+			t.Results[i].Reason = e.Error()
+			t.Status = "unknown/pending"
+			t.Results[i].Status = "unknown/pending"
 			var ce *pluginapi.CleanupError
 			if errors.As(e, &ce) {
 				t.Results[i].Status = ce.Status
@@ -319,6 +408,7 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 			return e
 		}
 		t.Results[i].Status = "deleted"
+		t.Status = "blocked"
 	}
 	t.Status = "deleted"
 	return nil

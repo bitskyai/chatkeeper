@@ -7,6 +7,7 @@ import (
 	"flag"
 	"github.com/bitskyai/chatkeeper/internal/cleanup"
 	"github.com/bitskyai/chatkeeper/internal/config"
+	"github.com/bitskyai/chatkeeper/internal/search"
 	"github.com/bitskyai/chatkeeper/internal/secrets"
 	"github.com/bitskyai/chatkeeper/internal/storage"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
@@ -65,7 +66,29 @@ func cleanupCommand(args []string, out io.Writer) error {
 			return e
 		}
 		defer s.Close()
-		r := cleanup.Run(ctx, w, s, d, *apply)
+		indexFailed := false
+		r := cleanup.Run(ctx, w, s, d, *apply, func(progress cleanup.Report) {
+			if !*apply || len(progress.Threads) == 0 {
+				return
+			}
+			// A running server owns the index. Update its shared index when present;
+			// otherwise the next reader/configuration builds from the journal overlay.
+			if _, err := os.Stat(filepath.Join(home, "state", "index", w.ID+".db")); err != nil {
+				return
+			}
+			source, err := search.FromPlugin(ctx, w.Storage, entry.Plugin)
+			if err != nil {
+				indexFailed = true
+				return
+			}
+			thread := progress.Threads[len(progress.Threads)-1]
+			if search.SyncShared(ctx, home, w.ID, source, pluginapi.Key{Channel: thread.Channel, RootTS: thread.RootTS}) != nil {
+				indexFailed = true
+			}
+		})
+		if indexFailed {
+			r.Reason = "cleanup finished but search update failed; rebuild index"
+		}
 		return writeCleanupReport(out, r, *apply)
 	}
 	return errors.New("workspace not found")
@@ -80,7 +103,7 @@ func writeCleanupReport(out io.Writer, r cleanup.Report, apply bool) error {
 			return errors.New("cleanup blocked; see report")
 		}
 		for _, t := range r.Threads {
-			if t.Status != "deleted" && t.Status != "deferred" {
+			if t.Status != "deleted" && t.Status != "cleaned" && t.Status != "deferred" {
 				return errors.New("cleanup blocked; see report")
 			}
 		}

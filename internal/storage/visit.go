@@ -34,6 +34,9 @@ func (s *Folder) Catalog(ctx context.Context, consume func(CatalogVisitor) error
 				continue
 			}
 			v, e := s.read(ctx, k, target)
+			if e == nil && v != nil {
+				e = s.deletionOverlay(k, v)
+			}
 			if e != nil {
 				s.fail(k)
 				continue
@@ -71,6 +74,9 @@ func (s *Folder) Inspect(ctx context.Context, k pluginapi.Key, consume func(*plu
 		return e
 	}
 	v, e := s.read(ctx, k, target)
+	if e == nil && v != nil {
+		e = s.deletionOverlay(k, v)
+	}
 	if e != nil {
 		return e
 	}
@@ -103,6 +109,9 @@ func (s *Folder) VisitUnlinked(ctx context.Context, yield func(pluginapi.Key, *p
 			continue
 		}
 		v, e := s.read(ctx, k, target)
+		if e == nil && v != nil {
+			e = s.deletionOverlay(k, v)
+		}
 		if e != nil || v == nil {
 			continue
 		}

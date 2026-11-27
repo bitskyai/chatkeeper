@@ -11,6 +11,12 @@ import (
 
 func syncDirectory(f *os.File) error { return f.Sync() }
 func lockFiles(ctx context.Context, s *Folder, extra ...string) (func(), error) {
+	return lockNames(ctx, s, append(extra, []string{".", ".threadkeep.lock", ".chatkeeper.lock"}...))
+}
+func cleanupLock(ctx context.Context, s *Folder) (func(), error) {
+	return lockNames(ctx, s, []string{"cleanup/lock"})
+}
+func lockNames(ctx context.Context, s *Folder, names []string) (func(), error) {
 	files := []*os.File{}
 	unlock := func() {
 		for i := len(files) - 1; i >= 0; i-- {
@@ -18,7 +24,7 @@ func lockFiles(ctx context.Context, s *Folder, extra ...string) (func(), error) 
 			_ = files[i].Close()
 		}
 	}
-	for _, name := range append(extra, ".", ".threadkeep.lock", ".chatkeeper.lock") {
+	for _, name := range names {
 
 		if name != "." {
 			if _, e := s.root.Lstat(name); e == nil {

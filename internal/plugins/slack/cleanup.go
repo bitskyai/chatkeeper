@@ -61,7 +61,7 @@ func (d *cleanupDriver) Verify(ctx context.Context, m pluginapi.ArchiveManifest)
 	}
 	me, e := d.client.Call(ctx, "auth.test", nil)
 	if e != nil {
-		return errors.New("cleanup identity request failed")
+		return cleanupReadError(e, "cleanup identity request failed")
 	}
 	if me["team_id"] != d.team || !id(me["user_id"], "user") {
 		return errors.New("cleanup identity mismatch")
@@ -72,7 +72,7 @@ func (d *cleanupDriver) Verify(ctx context.Context, m pluginapi.ArchiveManifest)
 		}
 		u, e := d.client.Call(ctx, "users.info", url.Values{"user": {str(me["user_id"])}})
 		if e != nil {
-			return errors.New("cleanup admin verification failed")
+			return cleanupReadError(e, "cleanup admin verification failed")
 		}
 		user, ok := u["user"].(map[string]any)
 		if !ok || user["id"] != me["user_id"] || user["is_admin"] != true && user["is_owner"] != true {
@@ -183,7 +183,7 @@ func (d *cleanupDriver) Check(ctx context.Context, m pluginapi.ArchiveManifest, 
 			}
 			return nil
 		}
-		return errors.New("cannot verify complete live thread")
+		return cleanupReadError(e, "cannot verify complete live thread")
 	}
 	if len(live) == 0 || live[0]["ts"] != m.RootTS || !ownerMatch(d.ws.Trigger, live[0]) {
 		return errors.New("live owner trigger missing")
@@ -318,4 +318,11 @@ func (Plugin) CleanupBoundary(w pluginapi.Workspace, m pluginapi.ArchiveManifest
 		return "archive workspace boundary mismatch"
 	}
 	return ""
+}
+
+func cleanupReadError(e error, reason string) error {
+	if errors.Is(e, errRateLimited) {
+		return &pluginapi.CleanupError{Status: "rate-limited", Reason: "cleanup read rate limit exhausted; resume later"}
+	}
+	return errors.New(reason)
 }

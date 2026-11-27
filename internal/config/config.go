@@ -299,10 +299,10 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 		ws.Storage = location
 		if v, has := raw["cleanup"]; has {
 			cleanup, ok := mapping(v)
-			if !ok || !keys(cleanup, "enabled", "token_env", "allow_others", "min_age_hours", "buffer_max_age_seconds", "own_only") {
+			if !ok || !keys(cleanup, "enabled", "token_env", "allow_others", "min_age_hours", "buffer_max_age_seconds", "own_only", "allow_zero_age") {
 				return nil, ErrConfig
 			}
-			for _, k := range []string{"enabled", "allow_others", "own_only"} {
+			for _, k := range []string{"enabled", "allow_others", "own_only", "allow_zero_age"} {
 				if v, has := cleanup[k]; has {
 					b, ok := v.(bool)
 					if !ok {
@@ -321,19 +321,22 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 			for _, k := range []string{"min_age_hours", "buffer_max_age_seconds"} {
 				if v, has := cleanup[k]; has {
 					n, ok := seconds(v)
-					if !ok || n < 0 || n > 1000000 || k == "buffer_max_age_seconds" && n == 0 {
+					if !ok || n < 0 || n > 1000000 || n == 0 && (k == "buffer_max_age_seconds" || cleanup["allow_zero_age"] != true) {
 						return nil, ErrConfig
 					}
 					if k == "min_age_hours" {
 						ws.Cleanup.MinAge = time.Duration(n * float64(time.Hour))
+						if ws.Cleanup.MinAge == 0 && cleanup["allow_zero_age"] != true {
+							return nil, ErrConfig
+						}
 					}
 				}
 			}
 			if v, has := cleanup["token_env"]; has {
+				if !envID.MatchString(text(v)) {
+					return nil, ErrConfig
+				}
 				ws.Cleanup.TokenEnv = text(v)
-			}
-			if v, has := cleanup["token_env"]; has && !envID.MatchString(text(v)) {
-				return nil, ErrConfig
 			}
 		}
 		creds := pluginapi.Credentials{}
