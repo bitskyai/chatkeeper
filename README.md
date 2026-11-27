@@ -131,7 +131,11 @@ To build a container: `docker build -t chatkeeper:local .` (BuildKit required).
 
 ## Slack app setup
 
-The wizard guides these steps and checks credentials before saving a workspace:
+The wizard guides these steps and checks credentials before saving a workspace.
+A coding agent can do the same from a terminal: see
+[Set up with a coding agent](docs/agent-setup.md) (`chatkeeper setup slack
+--print-manifest`, `--dry-run`, then save; the wizard's first page has a
+copyable prompt).
 
 1. Create a Slack app in your workspace from the wizard's manifest (bot scopes
    `channels:history`, `channels:read`, `groups:history`, `groups:read`,
@@ -139,12 +143,24 @@ The wizard guides these steps and checks credentials before saving a workspace:
    workspace emoji to the reaction picker). Install it and copy the bot token,
    then click **Test connection** to see the workspace, bot user and every
    granted or missing scope.
-2. Slack's Install App page shows only the bot token. For instant capture, the
-   wizard links to your app's Basic Information page: under App-Level Tokens,
-   generate a token with `connections:write` and test the Socket Mode connection.
-   The manifest already enables Socket Mode and subscribes `reaction_added`,
-   `reaction_removed`, `message.channels` and `message.groups`. Without an app
-   token choose **Continue with polling only**.
+2. Slack's Install App page shows only the bot token. For instant capture you
+   also need an app-level token (`xapp-`). Slack has no API that creates one, so
+   the wizard looks up your workspace and app from the bot token and shows six
+   numbered steps with copy buttons: open **Basic Information**
+   (`https://app.slack.com/app-settings/<team>/<app>/general`), under
+   App-Level Tokens click **Generate Token and Scopes**, name it `chatkeeper`,
+   add the single scope `connections:write`, generate and copy the token, check
+   **Enable Socket Mode** (`.../socket-mode`), paste and save. The step shows
+   only a one-line bot token summary, not the previous checklist. **Test
+   connection** opens a real Socket Mode session and checks the token belongs
+   to the same app as the bot token, freshly resolved from the bot token (it
+   fails closed when either app id cannot be confirmed); revoked tokens, a missing scope, the wrong
+   token type, another app's token or Socket Mode switched off each show the
+   exact fix and link. The manifest already enables Socket Mode and subscribes
+   `reaction_added`, `reaction_removed`, `message.channels` and
+   `message.groups`. Without an app token choose **Continue with polling only**
+   (checks every two minutes); the dashboard's **Enable instant capture**
+   reopens this step later.
 3. Invite the bot to each watched channel, including private channels, then
    select channels and one or more reactions. Every step has **Back**; entered
    values are kept and secrets stay server-side (shown as saved).
@@ -197,7 +213,11 @@ env = { CHATKEEPER_HOME = "/absolute/path/app-home" }
 ```
 
 Tools: `search_threads`, `get_thread`, `list_workspaces`. Stdio reads local archives
-without source credentials and emits JSON-RPC only on stdout. Use the same home
+and emits JSON-RPC only on stdout. Stdio also offers read-only `setup_status`
+(credential presence only, never values) and `validate_setup` (re-runs the
+connection tests with stored credentials, redacted); with no config yet it
+starts with only those two tools; see
+[agent setup](docs/agent-setup.md). Use the same home
 as the running app to share its index. REST offers `GET /api/search`,
 `GET /api/threads/{workspace}/{channel}/{ts}` and `GET /api/openapi.json`.
 HTTP MCP is `/mcp` and always requires a configured read-only bearer:
@@ -232,6 +252,7 @@ so power-loss durability depends on filesystem behavior. Read the
 
 ```sh
 chatkeeper check-config --offline --config config.yaml
+chatkeeper setup slack --help   # non-interactive setup, JSON result
 chatkeeper backfill --config config.yaml
 chatkeeper verify --config config.yaml
 chatkeeper version

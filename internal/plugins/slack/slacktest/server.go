@@ -138,7 +138,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.conn = c
 		s.mu.Unlock()
 		s.writeMu.Lock()
-		_ = c.Write(s.ctx, websocket.MessageText, []byte(`{"type":"hello","num_connections":1}`))
+		// The hello names the app; ?app= lets tests simulate another app's
+		// token and ?app=none a hello without an app id.
+		app := r.URL.Query().Get("app")
+		if app == "" {
+			app = "AFIXTURE"
+		}
+		info := map[string]any{"app_id": app}
+		if app == "none" {
+			info = map[string]any{}
+		}
+		hello, _ := json.Marshal(map[string]any{"type": "hello", "num_connections": 1, "connection_info": info})
+		_ = c.Write(s.ctx, websocket.MessageText, hello)
 		s.writeMu.Unlock()
 		defer func() {
 			s.mu.Lock()

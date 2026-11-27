@@ -46,6 +46,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request, csrf string, set
 		a.reportMu.Lock()
 		wr.Report = a.reports[wr.ID]
 		a.reportMu.Unlock()
+		wr.Upgrades = a.upgradeLinks(running)
 		wr.Fields = schemaFields(running.Entry.Plugin.CredentialSchema())
 		var raw map[string]any
 		_ = json.Unmarshal(running.Entry.Workspace.Settings, &raw)
@@ -74,6 +75,10 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request, csrf string, set
 func (a *App) settings(w http.ResponseWriter, r *http.Request, csrf string) {
 	if r.URL.Path == "/settings/cleanup" {
 		a.cleanupSettings(w, r, csrf, false)
+		return
+	}
+	if r.URL.Path == "/settings/upgrade" {
+		a.upgrade(w, r, csrf)
 		return
 	}
 	if r.Method == "GET" {

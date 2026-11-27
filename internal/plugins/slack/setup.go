@@ -51,32 +51,52 @@ var requiredScopes = []string{"channels:history", "channels:read", "groups:histo
 // optionalScopes unlock extras; setup continues without them.
 var optionalScopes = map[string]string{"emoji:read": "custom workspace emoji in the reaction picker"}
 
-const createBody = `1. Click Create Slack app, choose your workspace, review the settings and click Create. Socket Mode and every permission ChatKeeper needs are already filled in.
+const createBody = `1. Click Create Slack app. Slack opens "Create an app" with ChatKeeper's manifest already filled in: choose your workspace, click Next, review, then Create. Every permission ChatKeeper needs, the reaction and message events, and Socket Mode are included.
 2. In the left menu open Install App, click Install to Workspace, then Allow.
 3. Copy the Bot User OAuth Token (starts with xoxb-).
 
-Slack's Install App page only shows the bot token. You will create the app-level token (xapp-) in a later step; this wizard links you straight to the right page.`
+Slack's Install App page only shows the bot token. The optional app-level token (xapp-) for instant archiving comes in a later step; this wizard links you straight to the right page.
 
-const appTokenBody = `Live events need an app-level token (xapp-). It is created separately from the bot token:
-1. Open Basic Information (button below) and scroll to App-Level Tokens.
-2. Click Generate Token and Scopes, name it ChatKeeper, click Add Scope and choose connections:write, then Generate.
-3. Copy the token that starts with xapp- and paste it here, then click Test connection.
+If Slack shows an empty form instead, open Create a new app, choose From a manifest, pick your workspace, switch to YAML and paste the manifest below.`
 
-Socket Mode is already turned on by the manifest. If the test says otherwise, open Socket Mode settings and switch on Enable Socket Mode.
+// Slack has no API that creates app-level tokens (apps.manifest.create returns
+// only the app id and OAuth credentials), so this step guides the user through
+// the one manual page and then verifies the result. Backticked values that match
+// a Copy entry render inline with a copy button.
+const appTokenBody = `Optional, recommended: with an app-level token ChatKeeper archives a thread the moment someone reacts, on any message; without it ChatKeeper polls every two minutes and only sees reactions on the first message of a thread.
 
-No app-level token? Choose Continue with polling only. ChatKeeper will then check for reactions every two minutes instead of instantly; you can add the token later in Settings.`
+Slack has no API that creates this token, so it takes one minute by hand:
+1. Click Open Basic Information below, scroll down to App-Level Tokens and click Generate Token and Scopes.
+2. Token Name: ` + "`chatkeeper`" + `
+3. Click Add Scope and choose ` + "`connections:write`" + ` (the only scope it needs).
+4. Click Generate, then Copy the token (it starts with xapp-) and click Done.
+5. Click Open Socket Mode below and make sure Enable Socket Mode is switched on.
+6. Paste the token below and save it (Test connection checks it first).`
+
+const appTokenUpgrade = "Enable instant capture"
 
 func (Plugin) SetupFlow() []pluginapi.SetupStep {
 	return []pluginapi.SetupStep{
-		{ID: "create_app", Title: "Create your Slack app", Kind: "instructions", Body: createBody, Links: []pluginapi.Link{{Label: "Create Slack app", URL: "https://api.slack.com/apps?new_app=1&manifest_yaml=" + url.QueryEscape(AppManifest)}}},
+		{ID: "create_app", Title: "Create your Slack app", Kind: "instructions", Body: createBody, Links: []pluginapi.Link{{Label: "Create Slack app", URL: CreateAppURL()}, {Label: "Create a new app (empty form)", URL: "https://api.slack.com/apps?new_app=1"}}, Copy: []pluginapi.CopyText{{Label: "App manifest (YAML)", Value: AppManifest}}},
 		{ID: "bot_token", Title: "Paste your bot token", Kind: "form", Body: "Paste the Bot User OAuth Token (xoxb-) from Install App or OAuth & Permissions, then click Test connection. Tokens stay on this device or server and are never shown back.", Schema: json.RawMessage(`{"type":"object","properties":{"bot_token":{"type":"string","title":"Bot User OAuth Token (xoxb-)","x-secret":true}},"required":["bot_token"]}`), Run: validateBot, Test: validateBot},
-		{ID: "app_token", Title: "Add the app-level token", Kind: "form", Body: appTokenBody, Schema: json.RawMessage(`{"type":"object","properties":{"app_token":{"type":"string","title":"App-Level Token (xapp-)","x-secret":true}}}`), Prepare: appTokenLinks, Run: validateApp, Test: validateApp, Skip: "Continue with polling only", SkipNote: "Polling only: ChatKeeper checks for reactions on the first message of each thread every two minutes; reactions on replies need live events. Add an app-level token later in Settings for instant archiving."},
+		{ID: "app_token", Title: "Add the app-level token", Kind: "form", Body: appTokenBody, Copy: []pluginapi.CopyText{{Label: "Token Name", Value: AppTokenName}, {Label: "Scope", Value: AppTokenScope}}, Schema: json.RawMessage(`{"type":"object","properties":{"app_token":{"type":"string","title":"App-Level Token (xapp-)","x-secret":true}}}`), Prepare: appTokenLinks, Run: validateApp, Test: validateApp, Skip: "Continue with polling only", SkipNote: "Polling only: ChatKeeper checks for reactions on the first message of each thread every two minutes; reactions on replies need live events. Use Enable instant capture on the dashboard to add an app-level token later.", Upgrade: appTokenUpgrade},
 		{ID: "channels", Title: "Choose channels", Kind: "choose", Body: "Choose All invited channels, or a channel below. Private channels appear after inviting the bot. If a channel says invite the bot, open that channel and type /invite @ChatKeeper, then refresh this page.", Schema: json.RawMessage(`{"type":"object","properties":{"channels":{"type":"array","title":"Channels","items":{"type":"string"},"x-widget":"channel-picker"}}}`), Run: setupChannels, Prepare: func(ctx context.Context, st pluginapi.SetupState, env pluginapi.Env) (pluginapi.StepResult, error) {
 			return setupChannels(ctx, st, nil, env)
 		}},
 		{ID: "trigger", Title: "Choose reactions", Kind: "form", Body: "Pick one or more reactions. With live events (Socket Mode), adding one to any message in a thread, the first message or a reply, archives the whole thread instantly. Polling only reads reactions on the first message of each thread, so without an app-level token react on the first message. Skin tones count: :+1: matches every tone; type a toned name such as +1::skin-tone-3 to require that tone.", Schema: json.RawMessage(`{"type":"object","properties":{"reactions":{"type":"array","title":"Trigger reactions","items":{"type":"string"},"default":["white_check_mark"],"x-widget":"reaction-picker"},"match":{"type":"string","title":"Archive when","enum":["any","all"],"default":"any"}},"required":["reactions"]}`), Prepare: reactionChoices, Run: setupTrigger},
 		{ID: "ready", Title: "Connection ready", Kind: "instructions", Body: "Your connection is ready. Next choose where to save your archived threads."},
 	}
+}
+
+// AppTokenScope is the only scope an app-level token needs for Socket Mode.
+const AppTokenScope = "connections:write"
+
+// AppTokenName is the suggested name for the app-level token.
+const AppTokenName = "chatkeeper"
+
+// CreateAppURL opens Slack's create-from-manifest dialog prefilled with AppManifest.
+func CreateAppURL() string {
+	return "https://api.slack.com/apps?new_app=1&manifest_yaml=" + url.QueryEscape(AppManifest)
 }
 
 func authTest(ctx context.Context, c *Client, token string) (map[string]any, map[string]bool, error) {
@@ -159,7 +179,7 @@ func validateBot(ctx context.Context, _ pluginapi.SetupState, _ json.RawMessage,
 		data["app_id"] = appID
 	}
 	b, _ := json.Marshal(data)
-	msg := "Connected to " + str(doc["team"]) + " as @" + str(doc["user"]) + ". All required permissions granted."
+	msg := "Bot token OK · " + str(doc["team"]) + " (@" + str(doc["user"]) + "), all required permissions granted."
 	return pluginapi.StepResult{OK: true, Data: b, Checks: checks, Messages: []string{msg}}, nil
 }
 
@@ -172,39 +192,148 @@ func grantedText(ok bool) string {
 	return "missing"
 }
 
-// AppLinks deep-links the app's own settings pages once its id is known.
-func AppLinks(appID string) []pluginapi.Link {
-	if !appPattern.MatchString(appID) {
-		return []pluginapi.Link{{Label: "Open your Slack apps", URL: "https://api.slack.com/apps"}}
+// AppsURL lists the user's Slack apps; it is the fallback when ids are unknown.
+const AppsURL = "https://api.slack.com/apps"
+
+// AppSettingsURL is an app's settings page. Slack moved app settings to
+// app.slack.com/app-settings/<team>/<app>/<page>; the old
+// api.slack.com/apps/<app>/<page> deep links no longer resolve.
+func AppSettingsURL(teamID, appID, page string) string {
+	if !id(teamID, "team") || !appPattern.MatchString(appID) {
+		return AppsURL
 	}
-	return []pluginapi.Link{{Label: "Open Basic Information", URL: "https://api.slack.com/apps/" + appID + "/general"}, {Label: "Socket Mode settings", URL: "https://api.slack.com/apps/" + appID + "/socket-mode"}}
-}
-func appTokenLinks(_ context.Context, st pluginapi.SetupState, _ pluginapi.Env) (pluginapi.StepResult, error) {
-	var appID string
-	_ = json.Unmarshal(st["app_id"], &appID)
-	return pluginapi.StepResult{OK: true, Links: AppLinks(appID)}, nil
+	return "https://app.slack.com/app-settings/" + teamID + "/" + appID + "/" + page
 }
 
-// validateApp opens a real Socket Mode connection and waits for Slack's hello.
-func validateApp(ctx context.Context, _ pluginapi.SetupState, _ json.RawMessage, env pluginapi.Env) (pluginapi.StepResult, error) {
+// AppLinks deep-links the app's own settings pages once its ids are known.
+func AppLinks(teamID, appID string) []pluginapi.Link {
+	if AppSettingsURL(teamID, appID, "general") == AppsURL {
+		return []pluginapi.Link{{Label: "Open your Slack apps", URL: AppsURL}}
+	}
+	return []pluginapi.Link{{Label: "Open Basic Information (App-Level Tokens)", URL: AppSettingsURL(teamID, appID, "general")}, {Label: "Open Socket Mode", URL: AppSettingsURL(teamID, appID, "socket-mode")}}
+}
+
+// botApp resolves the workspace and the app that own the bot token: auth.test
+// gives the team and bot id and bots.info (users:read) maps the bot to its app.
+// Unresolved ids are "".
+func botApp(ctx context.Context, env pluginapi.Env) (teamID, appID string) {
+	token := env.Credentials["bot_token"]
+	if !validToken(token, "xoxb-") {
+		return "", ""
+	}
+	c := NewClient(token, env.HTTP)
+	doc, _, e := authTest(ctx, c, token)
+	if e != nil {
+		return "", ""
+	}
+	if id(doc["team_id"], "team") {
+		teamID = str(doc["team_id"])
+	}
+	if str(doc["bot_id"]) == "" {
+		return teamID, ""
+	}
+	info, e := c.Call(ctx, "bots.info", url.Values{"bot": {str(doc["bot_id"])}})
+	if e != nil {
+		return teamID, ""
+	}
+	if b, ok := info["bot"].(map[string]any); ok && appPattern.MatchString(str(b["app_id"])) {
+		appID = str(b["app_id"])
+	}
+	return teamID, appID
+}
+
+// expectedApp picks the ids for settings links: the live bot token lookup
+// first, else the ids saved by the bot token step or the workspace settings.
+func expectedApp(ctx context.Context, st pluginapi.SetupState, env pluginapi.Env) (teamID, appID string) {
+	teamID, appID = botApp(ctx, env)
+	var t, a string
+	_ = json.Unmarshal(st["team_id"], &t)
+	_ = json.Unmarshal(st["app_id"], &a)
+	if !id(teamID, "team") {
+		teamID = t
+	}
+	if !appPattern.MatchString(appID) {
+		appID = a
+	}
+	return teamID, appID
+}
+
+func appTokenLinks(ctx context.Context, st pluginapi.SetupState, env pluginapi.Env) (pluginapi.StepResult, error) {
+	teamID, appID := expectedApp(ctx, st, env)
+	res := pluginapi.StepResult{OK: true, Links: AppLinks(teamID, appID)}
+	if res.Links[0].URL == AppsURL {
+		res.Messages = []string{"ChatKeeper could not look up your app from the bot token. Open your Slack apps, pick the ChatKeeper app, then open Basic Information."}
+	}
+	return res, nil
+}
+
+// validateApp opens a real Socket Mode connection, waits for Slack's hello and
+// confirms the token belongs to the bot token's app.
+func validateApp(ctx context.Context, st pluginapi.SetupState, _ json.RawMessage, env pluginapi.Env) (pluginapi.StepResult, error) {
 	token := env.Credentials["app_token"]
 	if token == "" {
 		return pluginapi.StepResult{FieldErrors: map[string]string{"app_token": "Paste the App-Level Token starting with xapp-, or choose Continue with polling only"}}, nil
 	}
+	if strings.HasPrefix(token, "xoxb-") || strings.HasPrefix(token, "xoxp-") || strings.HasPrefix(token, "xoxe") {
+		return pluginapi.StepResult{FieldErrors: map[string]string{"app_token": "That is not an app-level token. Generate one under Basic Information > App-Level Tokens; it starts with xapp- (the xoxb- bot token goes in the previous step)"}}, nil
+	}
 	if !validToken(token, "xapp-") {
-		return pluginapi.StepResult{FieldErrors: map[string]string{"app_token": "Paste the App-Level Token starting with xapp- (the xoxb- bot token goes in the previous step)"}}, nil
+		return pluginapi.StepResult{FieldErrors: map[string]string{"app_token": "Paste the App-Level Token starting with xapp-, without spaces"}}, nil
 	}
-	check, ok := SocketCheck(ctx, NewClient("", env.HTTP), token)
+	team, want, why := verifiedApp(ctx, st, env)
+	links := AppLinks(team, want)
+	check, got, ok := socketHandshake(ctx, NewClient("", env.HTTP), token)
 	if !ok {
-		return pluginapi.StepResult{Checks: []pluginapi.Check{check}, Messages: []string{"Socket Mode test failed: " + check.Detail}}, nil
+		return pluginapi.StepResult{Checks: []pluginapi.Check{check}, Links: links, Messages: []string{"Socket Mode test failed: " + check.Detail}}, nil
 	}
-	return pluginapi.StepResult{OK: true, Checks: []pluginapi.Check{{Label: "App-level token", Detail: "accepted (connections:write)", OK: true}, check}, Messages: []string{"Socket Mode connected. Reactions will be archived instantly."}}, nil
+	checks := []pluginapi.Check{{Label: "App-level token", Detail: "accepted (" + AppTokenScope + ")", OK: true}, check}
+	// Fail closed: instant capture is only claimed once both sides of the
+	// comparison are known, so an unrelated app's token can never pass.
+	switch {
+	case want == "":
+		checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: "bot token's app unknown: " + why})
+		return pluginapi.StepResult{Checks: checks, Links: links, Messages: []string{"ChatKeeper could not confirm which Slack app the bot token belongs to (" + why + "), so it cannot check that this app-level token is for the same app. Test the bot token again (it needs users:read for bots.info), check your network, then test this token again."}}, nil
+	case got == "":
+		checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: "Slack's hello did not name the app"})
+		return pluginapi.StepResult{Checks: checks, Links: links, Messages: []string{"Socket Mode connected, but Slack did not say which app the token belongs to, so ChatKeeper cannot confirm it matches your bot token (" + want + "). Test again; if it persists, generate a new token under Basic Information > App-Level Tokens for " + want + "."}}, nil
+	case got != want:
+		checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: "token is for " + got + ", bot token is for " + want})
+		return pluginapi.StepResult{Checks: checks, Links: links, Messages: []string{"This app-level token belongs to a different Slack app (" + got + ") than your bot token (" + want + "). Click Open Basic Information to generate one for " + want + ", then paste it here."}}, nil
+	}
+	checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: got, OK: true})
+	return pluginapi.StepResult{OK: true, Checks: checks, Messages: []string{"Socket Mode connected. Reactions will be archived instantly."}}, nil
+}
+
+// verifiedApp resolves the app the current bot token belongs to. A live
+// lookup always wins over saved ids, which go stale when the bot token is
+// rotated; saved ids are used only when no bot token is available. why
+// explains an empty appID.
+func verifiedApp(ctx context.Context, st pluginapi.SetupState, env pluginapi.Env) (teamID, appID, why string) {
+	if validToken(env.Credentials["bot_token"], "xoxb-") {
+		teamID, appID = botApp(ctx, env)
+		if appID == "" {
+			return teamID, "", "the auth.test/bots.info lookup failed"
+		}
+		return teamID, appID, ""
+	}
+	_ = json.Unmarshal(st["team_id"], &teamID)
+	_ = json.Unmarshal(st["app_id"], &appID)
+	if !appPattern.MatchString(appID) {
+		return teamID, "", "no bot token or saved app id"
+	}
+	return teamID, appID, ""
 }
 
 // SocketCheck performs one complete Socket Mode handshake.
 func SocketCheck(ctx context.Context, c *Client, token string) (pluginapi.Check, bool) {
-	fail := func(detail string) (pluginapi.Check, bool) {
-		return pluginapi.Check{Label: "Socket Mode", Detail: detail}, false
+	check, _, ok := socketHandshake(ctx, c, token)
+	return check, ok
+}
+
+// socketHandshake also returns the app id from hello's connection_info.
+func socketHandshake(ctx context.Context, c *Client, token string) (pluginapi.Check, string, bool) {
+	fail := func(detail string) (pluginapi.Check, string, bool) {
+		return pluginapi.Check{Label: "Socket Mode", Detail: detail}, "", false
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -216,14 +345,16 @@ func SocketCheck(ctx context.Context, c *Client, token string) (pluginapi.Check,
 	var api apiError
 	if errors.As(e, &api) {
 		switch api.code {
-		case "invalid_auth", "not_authed", "token_revoked":
-			return fail("the app-level token was rejected (" + api.code + "); generate a new one")
+		case "invalid_auth", "not_authed", "token_revoked", "token_expired", "account_inactive":
+			return fail("Slack rejected the app-level token (" + api.code + "). It may have been revoked or mistyped: click Open Basic Information, generate a new token with " + AppTokenScope + " and paste it")
 		case "not_allowed_token_type":
-			return fail("this is not an app-level token; it must start with xapp-")
+			return fail("this is not an app-level token; paste the token that starts with xapp- from Basic Information > App-Level Tokens")
 		case "missing_scope":
-			return fail("the token lacks connections:write; generate it with that scope")
+			return fail("the token lacks " + AppTokenScope + ". Click Open Basic Information, open the token under App-Level Tokens, click Add Scope and choose " + AppTokenScope + " (or generate a new token with it)")
+		case "ratelimited":
+			return fail("Slack is rate limiting connections; wait a minute and test again")
 		default:
-			return fail("Slack refused the connection (" + api.code + "); confirm Enable Socket Mode is on")
+			return fail("Slack refused the connection (" + api.code + "). Click Open Socket Mode and switch on Enable Socket Mode, then test again")
 		}
 	}
 	if e != nil || SocketURL(str(doc["url"])) != nil {
@@ -231,7 +362,7 @@ func SocketCheck(ctx context.Context, c *Client, token string) (pluginapi.Check,
 	}
 	conn, _, e := websocket.Dial(ctx, str(doc["url"]), &websocket.DialOptions{HTTPClient: c.http})
 	if e != nil {
-		return fail("the Socket Mode websocket could not connect")
+		return fail("the Socket Mode websocket could not connect. Check that Enable Socket Mode is on and your network allows wss:// to slack.com")
 	}
 	defer conn.CloseNow()
 	conn.SetReadLimit(1 << 20)
@@ -241,12 +372,19 @@ func SocketCheck(ctx context.Context, c *Client, token string) (pluginapi.Check,
 	}
 	var hello struct {
 		Type string `json:"type"`
+		Info struct {
+			AppID string `json:"app_id"`
+		} `json:"connection_info"`
 	}
 	if json.Unmarshal(raw, &hello) != nil || hello.Type != "hello" {
 		return fail("connected, but Slack did not confirm the session")
 	}
 	_ = conn.Close(websocket.StatusNormalClosure, "")
-	return pluginapi.Check{Label: "Socket Mode", Detail: "connected (hello received)", OK: true}, true
+	appID := ""
+	if appPattern.MatchString(hello.Info.AppID) {
+		appID = hello.Info.AppID
+	}
+	return pluginapi.Check{Label: "Socket Mode", Detail: "connected (hello received)", OK: true}, appID, true
 }
 
 func reactionChoices(ctx context.Context, _ pluginapi.SetupState, env pluginapi.Env) (pluginapi.StepResult, error) {

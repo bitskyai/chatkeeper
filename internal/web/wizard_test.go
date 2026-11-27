@@ -84,6 +84,14 @@ func (c *wizardClient) expect(title string, contains ...string) {
 func TestWizardBackTestSkipPickerAndCheckNow(t *testing.T) {
 	keyring.MockInit()
 	fake := slacktest.New(t)
+	// A token from another Slack app connects, but its hello names that app.
+	fake.Overrides["apps.connections.open"] = func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer xapp-other-app" {
+			_, _ = w.Write([]byte(`{"ok":true,"url":"wss://socket.slack.com/socket?app=AOTHER"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"url":"wss://socket.slack.com/socket"}`))
+	}
 	home := t.TempDir()
 	cfgPath := filepath.Join(home, "config.yaml")
 	os.WriteFile(cfgPath, []byte("workspaces: []\n"), 0600)
@@ -98,8 +106,11 @@ func TestWizardBackTestSkipPickerAndCheckNow(t *testing.T) {
 	c := &wizardClient{t: t, base: server.URL, http: &http.Client{Jar: jar}}
 	c.do("GET", "/login?token=synthetic-launch", nil)
 	c.do("POST", "/setup/start", url.Values{"platform": {"slack"}})
-	c.expect("Create your Slack app", "only shows the bot token")
+	c.expect("Create your Slack app", "only shows the bot token", "Set up with an AI agent", `data-copy="agent-prompt"`, "chatkeeper setup slack --print-manifest")
 	c.do("POST", "/setup/step", nil)
+	if strings.Contains(c.body, "Set up with an AI agent") {
+		t.Fatal("agent panel belongs to the first step")
+	}
 
 	// 3. Test connection itemizes workspace, bot user and scopes without advancing.
 	c.expect("Paste your bot token", "Test connection", "← Back")
@@ -113,7 +124,14 @@ func TestWizardBackTestSkipPickerAndCheckNow(t *testing.T) {
 	c.do("POST", "/setup/step", url.Values{"bot_token": {""}, "action": {"continue"}})
 
 	// 1. App-level token guidance deep-links the app's Basic Information page.
-	c.expect("Add the app-level token", "App-Level Tokens", "connections:write", "https://api.slack.com/apps/AFIXTURE/general", "Continue with polling only")
+	c.expect("Add the app-level token", "App-Level Tokens", "connections:write", "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/general", "Continue with polling only")
+	// The token step shows only a one-line bot summary, not the bot step's checklist.
+	c.expect("Add the app-level token", "Bot token OK · Fixture", `data-copy="inline-0"`, "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/socket-mode")
+	for _, stale := range []string{"Scope reactions:read", "@fixturebot (UBOT)", "Fixture (TFIXTURE)", "api.slack.com/apps/"} {
+		if strings.Contains(c.body, stale) {
+			t.Fatal("app-level token step shows", stale)
+		}
+	}
 	c.do("POST", "/setup/step", url.Values{"app_token": {""}, "action": {"continue"}})
 	c.expect("Add the app-level token", "or choose Continue with polling only")
 	c.do("POST", "/setup/step", url.Values{"app_token": {"xapp-synthetic"}, "action": {"test"}})
@@ -189,6 +207,37 @@ func TestWizardBackTestSkipPickerAndCheckNow(t *testing.T) {
 	c.expect("Your threads, kept safe", "Recent capture events", "Archived thread CFIXTURE / 100.000001", "Polling only")
 	c.do("POST", "/settings/check", url.Values{"workspace": {"fixture"}})
 	c.expect("Your threads, kept safe", "Check now · fixture", "already archived (unchanged)")
+	// Enable instant capture reopens the app-level token step for the
+	// polling-only workspace, rejects another app's token and saves a good one.
+	upgrade := "/settings/upgrade?step=app_token&workspace=fixture"
+	c.do("GET", "/", nil)
+	c.expect("Your threads, kept safe", "Enable instant capture", upgrade)
+	// Only steps that declare an Upgrade can be reopened.
+	for _, bad := range []string{"/settings/upgrade?step=bot_token&workspace=fixture", "/settings/upgrade?step=app_token&workspace=missing"} {
+		if res, e := c.http.Get(c.base + bad); e != nil || res.StatusCode != http.StatusNotFound {
+			t.Fatal(bad, res, e)
+		} else {
+			res.Body.Close()
+		}
+	}
+	c.do("GET", upgrade, nil)
+	c.expect("Add the app-level token", "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/general", "https://app.slack.com/app-settings/TFIXTURE/AFIXTURE/socket-mode", `data-copy="inline-1"`, ">connections:write</code>", "Save and enable")
+	c.do("POST", "/settings/upgrade", url.Values{"workspace": {"fixture"}, "step": {"app_token"}, "app_token": {"xapp-other-app"}, "action": {"test"}})
+	c.expect("Add the app-level token", "different Slack app (AOTHER) than your bot token (AFIXTURE)")
+	if strings.Contains(c.body, "xapp-other-app") {
+		t.Fatal("app token echoed")
+	}
+	c.do("POST", "/settings/upgrade", url.Values{"workspace": {"fixture"}, "step": {"app_token"}, "app_token": {"xapp-other-app"}, "action": {"save"}})
+	c.expect("Add the app-level token", "different Slack app")
+	c.do("POST", "/settings/upgrade", url.Values{"workspace": {"fixture"}, "step": {"app_token"}, "app_token": {"xapp-synthetic"}, "action": {"save"}})
+	c.expect("Your threads, kept safe", "Live events")
+	if strings.Contains(c.body, "Enable instant capture") {
+		t.Fatal("upgrade still offered after saving the token")
+	}
+	cfg, e = config.LoadWithResolver(cfgPath, true, func(k string) string { v, _, _ := a.Secrets.Get(k); return v })
+	if e != nil || cfg.Workspaces[0].Credentials["app_token"] != "xapp-synthetic" {
+		t.Fatal("app token not saved", e)
+	}
 	// The viewer shows glyphs and marks trigger reactions.
 	c.do("GET", "/view/fixture/CFIXTURE/100.000001", nil)
 	if !strings.Contains(c.body, "reaction trigger") || !strings.Contains(c.body, ":fixture_parrot:") {
