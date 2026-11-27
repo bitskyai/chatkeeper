@@ -11,6 +11,7 @@ import (
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -637,5 +638,39 @@ func TestApplyBoundCleanedPreviewCannotDeleteConcurrentReply(t *testing.T) {
 	}
 	if next := Run(ctx, w, s, nil, false); next.Threads[0].Status != "dry-run" {
 		t.Fatalf("new reply must require fresh approval: %+v", next)
+	}
+}
+
+func TestCleanupBlocksArchiveWithGaps(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	v, e := s.Read(ctx, k)
+	if e != nil {
+		t.Fatal(e)
+	}
+	v.Documents = nil
+	v.Manifest.Gaps = []pluginapi.Gap{{Kind: "file", ID: "FPENDING", Message: "1000000001.000001", Reason: "download failed"}}
+	if _, e = s.Save(ctx, k, *v); e != nil {
+		t.Fatal(e)
+	}
+	d := &driver{}
+	for _, apply := range []bool{false, true} {
+		r := Run(ctx, w, s, d, apply)
+		if len(d.calls) != 0 || len(r.Threads) != 1 || r.Threads[0].Status != "blocked" || !strings.HasPrefix(r.Threads[0].Reason, "archive incomplete: ") || !strings.Contains(r.Threads[0].Reason, "FPENDING") {
+			t.Fatalf("apply=%v: %+v %v", apply, r, d.calls)
+		}
+	}
+	// Once the same file is captured the gap resolves and cleanup proceeds.
+	v, _ = s.Read(ctx, k)
+	v.Documents = nil
+	v.Manifest.Gaps = nil
+	v.Manifest.Files = []pluginapi.Attachment{{ID: "FPENDING", Path: "files/FPENDING.bin", Name: "f", Size: 1, SHA256: hash([]byte("x"))}}
+	v.Blobs = map[string]pluginapi.Blob{"files/FPENDING.bin": {Size: 1, SHA256: hash([]byte("x")), Data: []byte("x")}}
+	if _, e = s.Save(ctx, k, *v); e != nil {
+		t.Fatal(e)
+	}
+	if r := Run(ctx, w, s, d, true); r.Threads[0].Status != "deleted" || len(d.calls) != 3 {
+		t.Fatalf("%+v %v", r, d.calls)
 	}
 }

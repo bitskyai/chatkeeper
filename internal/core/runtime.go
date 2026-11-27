@@ -71,6 +71,14 @@ func (r *Runtime) Cause(e error) string {
 	for _, v := range r.Env.Credentials {
 		secrets = append(secrets, v)
 	}
+	// Remove this workspace's credentials from the untruncated plugin cause,
+	// then truncate: truncating first could keep a credential's prefix.
+	var pe *PluginError
+	if errors.As(e, &pe) && pe.detail != "" {
+		if msg := e.Error(); strings.HasSuffix(msg, pe.Error()) {
+			return pluginapi.Redact(strings.TrimSuffix(msg, pe.Error())+ErrPlugin.Error()+": "+pe.detail, secrets...)
+		}
+	}
 	return pluginapi.Redact(e.Error(), secrets...)
 }
 func (r *Runtime) logger() *slog.Logger {

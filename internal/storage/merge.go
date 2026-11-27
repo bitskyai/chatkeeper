@@ -166,14 +166,48 @@ func merge(old, fresh pluginapi.Snapshot, now string) (pluginapi.Snapshot, error
 	sort.Slice(fresh.Manifest.Files, func(i, j int) bool { return fresh.Manifest.Files[i].ID < fresh.Manifest.Files[j].ID })
 	// A file kept from an earlier generation is no longer missing.
 	var gaps []pluginapi.Gap
+	seen := map[string]bool{}
 	for _, g := range fresh.Manifest.Gaps {
 		if _, kept := files[g.ID]; g.Kind == "file" && g.ID != "" && kept {
 			continue
 		}
+		seen[gapKey(g)] = true
+		gaps = append(gaps, g)
+	}
+	// An earlier gap survives until the same item is verified recovered;
+	// otherwise deleting or editing its message would hide a missing item.
+	refetched := map[string]bool{}
+	for _, m := range incoming {
+		refetched[m["ts"].(string)] = true
+	}
+	for _, g := range old.Manifest.Gaps {
+		if seen[gapKey(g)] || gapRecovered(g, files, fresh.Users, refetched) {
+			continue
+		}
+		seen[gapKey(g)] = true
 		gaps = append(gaps, g)
 	}
 	fresh.Manifest.Gaps = gaps
 	return fresh, nil
+}
+
+func gapKey(g pluginapi.Gap) string { return g.Kind + "\x00" + g.ID + "\x00" + g.Message }
+
+// gapRecovered reports whether a fresh capture stored the item an earlier gap
+// recorded as missing. A gap whose fresh capture did not repeat it is resolved
+// only when its item is now present (a file or author) or, for an item without
+// an identity, when its message was fetched again without the gap.
+func gapRecovered(g pluginapi.Gap, files map[string]pluginapi.Attachment, users map[string]pluginapi.Message, refetched map[string]bool) bool {
+	switch {
+	case g.Kind == "file" && g.ID != "":
+		_, ok := files[g.ID]
+		return ok
+	case g.Kind == "user" && g.ID != "":
+		_, ok := users[g.ID]
+		return ok
+	default:
+		return g.Message != "" && refetched[g.Message]
+	}
 }
 
 // RemoveArchive is the explicit user/API deletion boundary. Refresh never calls it.

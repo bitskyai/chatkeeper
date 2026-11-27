@@ -160,3 +160,22 @@ func TestPluginErrorKeepsRedactedCause(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestCauseRemovesCredentialBeforeTruncation(t *testing.T) {
+	secret := "custom-credential-value-0123"
+	r := &Runtime{Env: pluginapi.Env{Credentials: pluginapi.Credentials{"bot_token": secret}}}
+	// Place the credential so it straddles the MaxErrorDetail boundary.
+	for off := pluginapi.MaxErrorDetail - len(secret); off <= pluginapi.MaxErrorDetail+2; off++ {
+		pad := strings.Repeat("a ", off/2) + strings.Repeat("b", off%2)
+		e := Guard(context.Background(), time.Second, func(context.Context) error { return errors.New(pad + secret + " tail") })
+		got := r.Cause(e)
+		for n := 6; n <= len(secret); n++ {
+			if strings.Contains(got, secret[:n]) {
+				t.Fatalf("offset %d leaked %q in %q", off, secret[:n], got)
+			}
+		}
+		if wrapped := r.Cause(fmt.Errorf("history: %w", e)); strings.Contains(wrapped, secret[:6]) || !strings.HasPrefix(wrapped, "history: plugin failure") {
+			t.Fatalf("wrapped offset %d: %q", off, wrapped)
+		}
+	}
+}

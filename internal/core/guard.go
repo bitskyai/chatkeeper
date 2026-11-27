@@ -14,8 +14,19 @@ var ErrPlugin = errors.New("plugin failure")
 
 // PluginError contains a plugin's error: errors.Is(err, ErrPlugin) holds, the
 // original value is dropped (so it cannot impersonate core sentinels such as
-// ErrTimeout), and only a redacted, bounded description of its cause is kept.
-type PluginError struct{ Cause string }
+// ErrTimeout), and only a redacted, bounded description of its cause is shown.
+// detail keeps the cause before truncation (bounded by maxDetail) so a caller
+// that knows the workspace credentials can remove them before Redact truncates;
+// otherwise a credential crossing the truncation boundary would leak its prefix.
+// It is never rendered except through pluginapi.Redact.
+type PluginError struct {
+	Cause  string
+	detail string
+}
+
+// maxDetail bounds the retained raw cause; far above pluginapi.MaxErrorDetail,
+// so anything it cuts is also cut by the final truncation.
+const maxDetail = 64 << 10
 
 func (e *PluginError) Error() string {
 	if e.Cause == "" {
@@ -33,9 +44,13 @@ func Contain(e error) error {
 	}
 	var pe *PluginError
 	if errors.As(e, &pe) {
-		return &PluginError{Cause: pluginapi.Redact(pe.Cause)}
+		return &PluginError{Cause: pluginapi.Redact(pe.Cause), detail: pe.detail}
 	}
-	return &PluginError{Cause: pluginapi.Redact(e.Error())}
+	raw := e.Error()
+	if len(raw) > maxDetail {
+		raw = raw[:maxDetail]
+	}
+	return &PluginError{Cause: pluginapi.Redact(raw), detail: raw}
 }
 
 // panicError keeps ErrPanic identity and a redacted description of the value.
