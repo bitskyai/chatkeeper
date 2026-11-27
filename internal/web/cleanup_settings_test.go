@@ -149,7 +149,7 @@ func TestBrowserCleanupSettings(t *testing.T) {
 	defer cancel()
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	e := chromedp.Run(ctx, chromedp.Navigate(server.URL+"/login?token=synthetic-launch"), chromedp.Navigate(server.URL+"/settings/cleanup?workspace=fixture"), chromedp.WaitVisible(`input[name="enabled"]`), chromedp.Click(`input[name="enabled"]`), chromedp.Click(`input[name="owners"][value="UOWNER"]`), chromedp.SetValue(`input[name="cleanup_token"]`, "xoxb-synthetic-browser"), chromedp.SetValue(`input[name="min_age_hours"]`, "0"), chromedp.Click(`input[name="allow_zero_age"]`), chromedp.Click(`button[value="test"]`), chromedp.WaitVisible(`[role="status"]`), chromedp.SetValue(`input[name="cleanup_token"]`, "xoxb-synthetic-browser"), chromedp.Click(`button[value="save"]`), chromedp.WaitVisible(`[role="status"]`))
+	e := chromedp.Run(ctx, chromedp.Navigate(server.URL+"/login?token=synthetic-launch"), chromedp.Navigate(server.URL+"/settings/cleanup?workspace=fixture"), chromedp.WaitVisible(`input[name="enabled"]`), chromedp.Click(`input[name="enabled"]`), chromedp.Click(`input[name="owners"][value="UOWNER"]`), chromedp.SetValue(`input[name="cleanup_token"]`, "xoxb-synthetic-browser"), chromedp.SetValue(`input[name="min_age_hours"]`, "0"), chromedp.Click(`input[name="allow_zero_age"]`), chromedp.Click(`button[value="test"]`), chromedp.WaitVisible(`[role="status"]`), chromedp.SetValue(`input[name="cleanup_token"]`, "xoxb-synthetic-browser"), chromedp.Click(`button[value="save"]`), chromedp.WaitVisible(`//p[@role="status" and contains(., "Cleanup settings saved")]`, chromedp.BySearch))
 	if e != nil {
 		t.Fatal(e)
 	}

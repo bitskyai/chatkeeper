@@ -154,7 +154,7 @@ func TestRealCleanupSettingsUI(t *testing.T) {
 	if !strings.Contains(notice, "Credential verified") {
 		t.Fatal("credential test failed")
 	}
-	run(chromedp.Click(`button[value="save"]`), chromedp.WaitVisible(`[role="status"]`), chromedp.Navigate(srv.URL+"/cleanup/?workspace=live-cleanup"), chromedp.Click(`form[action="/cleanup/preview"] button`), chromedp.WaitVisible(`form[action="/cleanup/apply"]`))
+	run(chromedp.Click(`button[value="save"]`), chromedp.WaitVisible(`//p[@role="status" and contains(., "Cleanup settings saved")]`, chromedp.BySearch), chromedp.Navigate(srv.URL+"/cleanup/?workspace=live-cleanup"), chromedp.Click(`form[action="/cleanup/preview"] button`), chromedp.WaitVisible(`form[action="/cleanup/apply"]`))
 	var text string
 	run(chromedp.Text("main", &text))
 	if !strings.Contains(text, "dry-run") {
