@@ -129,6 +129,9 @@ func merge(old, fresh pluginapi.Snapshot, now string) (pluginapi.Snapshot, error
 	}
 	for path, b := range fresh.Documents {
 		if strings.HasPrefix(path, "raw/") {
+			if prior, ok := rawDocuments[path]; ok && !bytes.Equal(prior, b) {
+				return fresh, ErrIntegrity
+			}
 			rawDocuments[path] = bytes.Clone(b)
 		}
 	}

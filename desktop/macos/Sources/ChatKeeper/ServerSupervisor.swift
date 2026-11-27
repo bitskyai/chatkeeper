@@ -26,6 +26,7 @@ final class ServerSupervisor {
     private var log: FileHandle?
     /// Accessed only on `queue`.
     private var stdoutLines = LineBuffer()
+    private var stderrLines = LineBuffer()
 
     var isRunning: Bool { process?.isRunning ?? false }
 
@@ -36,7 +37,7 @@ final class ServerSupervisor {
     static var logURL: URL {
         let logs = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask).first!
             .appendingPathComponent("Logs/ChatKeeper", isDirectory: true)
-        try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         return logs.appendingPathComponent("chatkeeper.log")
     }
 
@@ -68,6 +69,7 @@ final class ServerSupervisor {
         child.standardInput = stdin
 
         stdoutLines = LineBuffer()
+        stderrLines = LineBuffer()
         stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             if data.isEmpty {
@@ -83,9 +85,16 @@ final class ServerSupervisor {
             let data = handle.availableData
             if data.isEmpty {
                 handle.readabilityHandler = nil
+                self?.queue.async {
+                    guard let self else { return }
+                    for line in self.stderrLines.append(Data([0x0A])) { self.writeLog(line + "\n") }
+                }
                 return
             }
-            self?.queue.async { self?.writeLog(String(decoding: data, as: UTF8.self)) }
+            self?.queue.async {
+                guard let self else { return }
+                for line in self.stderrLines.append(data) { self.writeLog(line + "\n") }
+            }
         }
         child.terminationHandler = { [weak self] p in
             self?.queue.async { self?.handleExit(p) }

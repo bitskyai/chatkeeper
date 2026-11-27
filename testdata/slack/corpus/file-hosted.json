@@ -20,7 +20,8 @@
           "size": 5,
           "mode": "hosted",
           "filetype": "hosted",
-          "mimetype": "application/octet-stream"
+          "mimetype": "application/octet-stream",
+          "url_private": "https://files.slack.com/file"
         }
       ]
     }

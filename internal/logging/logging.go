@@ -20,6 +20,7 @@ const Backups = 5
 type Sink struct {
 	Logger      *slog.Logger
 	mu          sync.Mutex
+	closed      bool
 	file        *os.File
 	path        string
 	size, limit int64
@@ -39,6 +40,8 @@ func Open(home string, limit int64, backups int, stderr io.Writer, level slog.Le
 		return nil, e
 	}
 	opts := &slog.HandlerOptions{Level: level}
+	_ = s.file.Close()
+	s.file = nil
 	s.Logger = slog.New(tee{a: slog.NewJSONHandler(s, opts), b: slog.NewTextHandler(stderr, opts)})
 	return s, nil
 }
@@ -63,7 +66,7 @@ func (s *Sink) open() error {
 func (s *Sink) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.file == nil {
+	if s.closed {
 		return 0, os.ErrClosed
 	}
 	coordination, e := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_RDWR, 0600)
@@ -76,10 +79,12 @@ func (s *Sink) Write(p []byte) (int, error) {
 	}
 	defer unlockFile(coordination)
 	// Another command may have rotated since our last write. Always reopen while locked.
-	if e = s.file.Close(); e != nil {
-		return 0, e
+	if s.file != nil {
+		if e = s.file.Close(); e != nil {
+			return 0, e
+		}
+		s.file = nil
 	}
-	s.file = nil
 	if e = s.open(); e != nil {
 		return 0, e
 	}
@@ -104,6 +109,12 @@ func (s *Sink) Write(p []byte) (int, error) {
 			return 0, e
 		}
 	}
+	defer func() {
+		if s.file != nil {
+			_ = s.file.Close()
+			s.file = nil
+		}
+	}()
 	n, e := s.file.Write(p)
 	s.size += int64(n)
 	return n, e
@@ -111,6 +122,7 @@ func (s *Sink) Write(p []byte) (int, error) {
 func (s *Sink) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.closed = true
 	if s.file == nil {
 		return nil
 	}

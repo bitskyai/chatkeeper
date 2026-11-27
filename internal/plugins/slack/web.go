@@ -710,7 +710,7 @@ func (s *Session) History(ctx context.Context, channel, oldest string) ([]plugin
 	out := []pluginapi.RootRef{}
 	for _, m := range messages {
 		ts := str(m["ts"])
-		if thread, has := m["thread_ts"]; has && thread != ts {
+		if thread := str(m["thread_ts"]); id(thread, "ts") && thread != ts {
 			continue
 		}
 		root, e := normalizeRoot(m)
@@ -929,6 +929,12 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 		messages[i] = m
 		mts := str(m["ts"])
 		note := func(reason string) { gap("unrendered", mts, mts, reason) }
+		for _, key := range []string{"versions", "source_events", "source_deleted_at"} {
+			if _, has := m[key]; has {
+				delete(m, key)
+				note("source field conflicts with archive annotation; original retained in raw response")
+			}
+		}
 		if i == 0 && incomplete {
 			m["reply_count"] = len(messages) - 1
 			note("reply count disagrees with returned messages; original retained in raw response")

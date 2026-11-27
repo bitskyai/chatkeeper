@@ -207,3 +207,13 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: URL(fileURLWithPath: url.path + ".1")), "first")
     }
 }
+
+final class SplitCredentialTests: XCTestCase {
+    func testRedactAfterLineAssembly() {
+        var lines = LineBuffer()
+        XCTAssertEqual(lines.append(Data("Bearer synthetic-".utf8)), [])
+        let complete = lines.append(Data("secret\n".utf8)).map(redactSecrets).joined()
+        XCTAssertFalse(complete.contains("synthetic-secret"))
+        XCTAssertTrue(complete.contains("REDACTED"))
+    }
+}

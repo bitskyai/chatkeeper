@@ -15,21 +15,12 @@
       "blocks": [
         {
           "type": "image",
-          "block_id": "synthetic",
-          "text": {
-            "type": "plain_text",
-            "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
-          },
           "title": {
             "type": "plain_text",
             "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
           },
-          "alt_text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
-          "description": {
-            "type": "plain_text",
-            "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
-          },
-          "fallback": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
+          "image_url": "https://example.invalid/image",
+          "alt_text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>"
         }
       ]
     }

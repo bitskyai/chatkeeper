@@ -137,3 +137,25 @@ func TestAnotherWriterRotationDoesNotHideNewRecords(t *testing.T) {
 		t.Fatal("new record hidden on rotated inode", lines, e)
 	}
 }
+
+func TestCredentialPatternsRedactedBeforeBothSinks(t *testing.T) {
+	dir := t.TempDir()
+	var stderr bytes.Buffer
+	s, e := Open(dir, 100000, 2, &stderr, slog.LevelInfo)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer s.Close()
+	logger := pluginapi.RedactingLogger(s.Logger, nil)
+	token := "xoxb-" + "synthetic-sensitive-value"
+	logger.Error("plugin failed "+token, "cause", "Bearer synthetic-bearer-value")
+	raw, e := os.ReadFile(filepath.Join(dir, "logs", "chatkeeper.log"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, out := range []string{string(raw), stderr.String()} {
+		if strings.Contains(out, token) || strings.Contains(out, "synthetic-bearer-value") {
+			t.Fatal("credential leaked")
+		}
+	}
+}

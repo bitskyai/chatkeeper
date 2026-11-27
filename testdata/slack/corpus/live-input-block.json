@@ -1,0 +1,159 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "user": "UFIXTURE",
+      "type": "message",
+      "ts": "100.000001",
+      "bot_id": "BFIXTURE",
+      "app_id": "AFIXTURE",
+      "text": "[chatkeeper-corpus] corpusneedle synthetic-run input-block ",
+      "team": "TFIXTURE",
+      "bot_profile": {
+        "id": "BFIXTURE",
+        "deleted": false,
+        "name": "Fixture",
+        "updated": 1795147280,
+        "app_id": "AFIXTURE",
+        "user_id": "UFIXTURE",
+        "icons": {
+          "image_36": "https://example.invalid/sanitized",
+          "image_48": "https://example.invalid/sanitized",
+          "image_72": "https://example.invalid/sanitized"
+        },
+        "team_id": "TFIXTURE"
+      },
+      "thread_ts": "100.000001",
+      "reply_count": 1,
+      "reply_users_count": 1,
+      "latest_reply": "101.000001",
+      "reply_users": [
+        "UFIXTURE"
+      ],
+      "is_locked": false,
+      "subscribed": false,
+      "blocks": [
+        {
+          "type": "input",
+          "block_id": "synthetic",
+          "label": {
+            "type": "plain_text",
+            "text": "Label",
+            "emoji": true
+          },
+          "optional": false,
+          "dispatch_action": false,
+          "element": {
+            "type": "plain_text_input",
+            "action_id": "synthetic",
+            "dispatch_action_config": {
+              "trigger_actions_on": [
+                "on_enter_pressed"
+              ]
+            }
+          }
+        }
+      ],
+      "reactions": [
+        {
+          "name": "white_check_mark",
+          "users": [
+            "UFIXTURE"
+          ],
+          "count": 1
+        }
+      ]
+    },
+    {
+      "subtype": "thread_broadcast",
+      "bot_id": "BFIXTURE",
+      "thread_ts": "100.000001",
+      "root": {
+        "user": "UFIXTURE",
+        "type": "message",
+        "ts": "100.000001",
+        "bot_id": "BFIXTURE",
+        "app_id": "AFIXTURE",
+        "text": "[chatkeeper-corpus] corpusneedle synthetic-run input-block ",
+        "team": "TFIXTURE",
+        "bot_profile": {
+          "id": "BFIXTURE",
+          "deleted": false,
+          "name": "Fixture",
+          "updated": 1795147280,
+          "app_id": "AFIXTURE",
+          "user_id": "UFIXTURE",
+          "icons": {
+            "image_36": "https://example.invalid/sanitized",
+            "image_48": "https://example.invalid/sanitized",
+            "image_72": "https://example.invalid/sanitized"
+          },
+          "team_id": "TFIXTURE"
+        },
+        "thread_ts": "100.000001",
+        "reply_count": 1,
+        "reply_users_count": 1,
+        "latest_reply": "101.000001",
+        "reply_users": [
+          "UFIXTURE"
+        ],
+        "is_locked": false,
+        "subscribed": false,
+        "blocks": [
+          {
+            "type": "input",
+            "block_id": "synthetic",
+            "label": {
+              "type": "plain_text",
+              "text": "Label",
+              "emoji": true
+            },
+            "optional": false,
+            "dispatch_action": false,
+            "element": {
+              "type": "plain_text_input",
+              "action_id": "synthetic",
+              "dispatch_action_config": {
+                "trigger_actions_on": [
+                  "on_enter_pressed"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "user": "UFIXTURE",
+      "type": "message",
+      "ts": "101.000001",
+      "app_id": "AFIXTURE",
+      "text": "[chatkeeper-corpus] corpusneedle synthetic-run broadcast reply",
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "synthetic",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "[chatkeeper-corpus] corpusneedle synthetic-run broadcast reply"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "reactions": [
+        {
+          "name": "+1::skin-tone-3",
+          "users": [
+            "UFIXTURE"
+          ],
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

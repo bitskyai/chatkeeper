@@ -117,7 +117,9 @@ func TestFormatCorpus(t *testing.T) {
 					t.Fatal(err)
 				}
 				if strings.Contains(text, "corpusneedle") {
-					idx := search.New(t.TempDir())
+					// Exercise real FTS extraction in its private in-memory fallback; disk
+					// archive persistence is asserted above and live CLI coverage uses disk indexes.
+					idx := search.NewReadOnly(t.TempDir())
 					defer idx.Close()
 					if err = idx.Configure(context.Background(), map[string]search.Source{"fixture": {Path: dir, Content: slack.Hooks{}, Identity: "slack@corpus"}}); err != nil {
 						t.Fatal(err)
