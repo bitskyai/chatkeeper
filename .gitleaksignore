@@ -1,0 +1,2 @@
+# Synthetic, never-valid token in the live test of c818fed (later built at runtime).
+c818fedd89d3359ac8454ad52d86b55e323c6691:internal/plugins/slack/apptoken_live_test.go:slack-app-token:49

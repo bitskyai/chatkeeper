@@ -1,3 +1,5 @@
+//go:build !noslack
+
 package main
 
 import (
