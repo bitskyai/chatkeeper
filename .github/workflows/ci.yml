@@ -1,0 +1,174 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  vet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - run: go vet ./...
+  staticcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - run: go test -race -count=1 ./...
+      - run: go test -tags noslack ./...
+      - run: go run -tags noslack ./cmd/chatkeeper version | tee /tmp/version.txt
+      - run: |
+          grep -qx 'plugins: 2' /tmp/version.txt
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - run: go run github.com/zricethezav/gitleaks/v8@v8.30.1 git --redact --no-banner
+  cross-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - run: go build -trimpath -o dist/chatkeeper-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/chatkeeper
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - name: Install headless Chrome
+        run: |
+          curl -fsSLo /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get update
+          sudo apt-get install -y /tmp/google-chrome.deb
+      - run: go test -race -count=1 ./internal/web -run TestBrowserWizard -v
+        env:
+          CHATKEEPER_E2E: '1'
+          TMPDIR: /tmp
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          syft-version: v1.42.0
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          version: v2.14.1
+          args: check
+      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          version: v2.14.1
+          args: release --snapshot --clean
+      - run: cd dist && sha256sum --check SHA256SUMS
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - run: docker build -t chatkeeper:ci .
+      - name: Check empty bootstrap password fails closed
+        run: |
+          if env -u CHATKEEPER_ADMIN_PASSWORD docker compose --env-file deploy/compose/.env.example -f deploy/compose/compose.yaml config -q; then
+            echo "Compose accepted an empty admin password" >&2
+            exit 1
+          fi
+      - name: Exercise image and Compose healthchecks
+        env:
+          CHATKEEPER_ADMIN_PASSWORD: synthetic-password
+          CHATKEEPER_VERSION: ci
+        run: |
+          docker run -d --name image-health --read-only --tmpfs /tmp -v /data -e CHATKEEPER_ADMIN_PASSWORD chatkeeper:ci
+          trap 'docker rm -fv image-health; docker compose -f deploy/compose/compose.yaml down -v' EXIT
+          python - <<'PYTHON'
+          import json, subprocess, time
+          for _ in range(60):
+              state = json.loads(subprocess.check_output(["docker", "inspect", "image-health"]))[0]["State"]
+              if state["Health"]["Status"] == "healthy":
+                  break
+              if not state["Running"]:
+                  raise RuntimeError("container exited before becoming healthy")
+              time.sleep(1)
+          else:
+              raise RuntimeError("image healthcheck timed out")
+          PYTHON
+          docker exec image-health /chatkeeper healthcheck
+          docker tag chatkeeper:ci ghcr.io/bitskyai/chatkeeper:ci
+          docker compose -f deploy/compose/compose.yaml up -d --wait --wait-timeout 60
+          docker compose -f deploy/compose/compose.yaml exec -T chatkeeper /chatkeeper healthcheck
+      - run: |
+          go run helm.sh/helm/v3/cmd/helm@v3.20.0 lint deploy/helm/chatkeeper
+          go run helm.sh/helm/v3/cmd/helm@v3.20.0 template chatkeeper deploy/helm/chatkeeper > /tmp/chart.yaml
+  native-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - run: go test -timeout 3m ./...
+      - run: go build -o chatkeeper-smoke${{ runner.os == 'Windows' && '.exe' || '' }} ./cmd/chatkeeper
+      - shell: bash
+        run: |
+          ./chatkeeper-smoke${{ runner.os == 'Windows' && '.exe' || '' }} --help
+          python scripts/smoke-release.py ./chatkeeper-smoke${{ runner.os == 'Windows' && '.exe' || '' }}
+  vulnerability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...

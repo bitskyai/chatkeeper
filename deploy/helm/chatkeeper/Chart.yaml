@@ -1,0 +1,6 @@
+apiVersion: v2
+name: chatkeeper
+description: Private chat thread archive, browser UI and MCP server
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

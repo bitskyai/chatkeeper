@@ -1,0 +1,19 @@
+{
+  "channel": "CFIXTURE",
+  "files": [],
+  "message_count": 2,
+  "objects": {
+    "messages.json": {
+      "sha256": "1fd64503fc1646496726ceff68e6d4b30d71370c64f7ed11158c18901e8c66e3",
+      "size": 742
+    },
+    "users.json": {
+      "sha256": "b6d4b896b445f17570ba5516ca104b122ac18371dd19bba1531729dd81921edf",
+      "size": 312
+    }
+  },
+  "permalink": "https://fixture.slack.com/archives/CFIXTURE/p100000001?thread_ts=100.000001&cid=CFIXTURE",
+  "root_ts": "100.000001",
+  "schema": 1,
+  "team_id": "TFIXTURE"
+}

@@ -1,0 +1,5 @@
+/chatkeeper
+/dist/
+.superpowers/
+.threadkeep.lock
+.chatkeeper.lock

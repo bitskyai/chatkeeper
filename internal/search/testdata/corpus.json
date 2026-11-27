@@ -1,0 +1,14 @@
+{
+ "threads": [
+  {"workspace":"one","channel":"CFIXTURE","root_ts":"100.000001","messages":[{"ts":"100.000001","user":"UOWNER","reply_count":1,"text":"searchable archive café 東京"},{"ts":"101.000001","thread_ts":"100.000001","user":"UAUTHOR","text":"reply résumé"}]},
+  {"workspace":"one","channel":"CFIXTURE","root_ts":"200.000001","messages":[{"ts":"200.000001","user":"UOWNER","text":"searchable archive archive archive"}]},
+  {"workspace":"two","channel":"COTHER","root_ts":"300.000001","messages":[{"ts":"300.000001","user":"UOWNER","text":"searchable release Ελληνικά"}]}
+ ],
+ "queries":[
+  {"q":"searchable"}, {"q":"archive"}, {"q":"cafe"}, {"q":"東京"}, {"q":"Ελληνικά"},
+  {"q":"arch*"}, {"q":"archive OR release"}, {"q":"archive NOT reply"}, {"q":"\"searchable archive\""},
+  {"q":"searchable","workspace":"one","author":"UAUTHOR"},
+  {"q":"searchable","channel":"COTHER"}, {"q":"searchable","from":"100.000002","to":"300.000002"},
+  {"q":"searchable","workspace":"missing"}
+ ]
+}

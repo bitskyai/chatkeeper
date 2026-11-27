@@ -1,0 +1,40 @@
+[
+  {
+    "blocks": [
+      {
+        "block_id": "synthetic",
+        "elements": [
+          {
+            "elements": [
+              {
+                "text": "fixture",
+                "type": "text"
+              }
+            ],
+            "type": "rich_text_section"
+          }
+        ],
+        "type": "rich_text"
+      }
+    ],
+    "reactions": [
+      {
+        "count": 1,
+        "name": "white_check_mark",
+        "users": [
+          "UOWNER"
+        ]
+      }
+    ],
+    "reply_count": 1,
+    "text": "Synthetic caf\u00e9 \ud83d\ude00 <>& <@UMENTION>",
+    "ts": "100.000001",
+    "user": "UOWNER"
+  },
+  {
+    "text": "Synthetic reply",
+    "thread_ts": "100.000001",
+    "ts": "101.000001",
+    "user": "UAUTHOR"
+  }
+]

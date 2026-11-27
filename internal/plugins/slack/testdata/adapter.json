@@ -1,0 +1,2454 @@
+[
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_complete_snapshot_hashes_and_read_only_calls (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_complete_snapshot_hashes_and_read_only_calls (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_replies_repeated_root_deduplicated (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": true,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": "next"
+          }
+        }
+      },
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "cursor": "next",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_repeated_reply_not_deduplicated (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": true,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": "next"
+          }
+        }
+      },
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "cursor": "next",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[missing_reply] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[foreign_reply] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "200.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[missing_author] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "error": "user_not_found",
+          "ok": false
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[bad_profile] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": []
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[size] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWI=",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[external] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "is_external": true,
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[mode] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "mode": "external",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[access] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "file_access": "access_denied",
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_incomplete_or_unsupported_thread_fails_closed[host] (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://example.invalid/file"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICI4MTIwOGVmNDc3OWY0NzUwYjI2OTU4YTQzODkzYjFmMmYwOGE5ZjAxNGE3MTFmYTBmOTg1NDNmZDFmNTM4M2Q2IiwKICAgICAgInNpemUiOiA0MTgKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICI3NjgzODgzOWM1MGI0M2M1YWRiZjZkZjE4NzNjZTIxYzEwNWQ3NDgyZmZmMTYzMjI1NTg0NjdjZGM0MWUwMDliIiwKICAgICAgInNpemUiOiAzMTIKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogImFzayA8QFVNRU5USU9OPiBhbmQgPEBVR09ORT4iLAogICAgInRocmVhZF90cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ0cyI6ICIxMDEuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVBVVRIT1IiCiAgfQpdCg==",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU1FTlRJT04iOiB7CiAgICAiaWQiOiAiVU1FTlRJT04iLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_mentions_are_stored_but_unavailable_mentions_optional (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "ask <@UMENTION> and <@UGONE>",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UGONE"
+        },
+        "response": {
+          "error": "user_not_found",
+          "ok": false
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UMENTION"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UMENTION",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJjM2I3YjE4MzNjNzQwZTRkY2NmZTJjNDc1YjAzZmE5ODQwOTFlYTY1OTYxMjZlMWQ5MmE4OTJhYjU0NjlmOTRmIiwKICAgICAgInNpemUiOiAzOTAKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICI5LjAwMDAwMSIsCiAgInNjaGVtYSI6IDEsCiAgInRlYW1faWQiOiAiVEZJWFRVUkUiCn0K",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICI5LjAwMDAwMSIsCiAgICAidXNlciI6ICJVT1dORVIiCiAgfSwKICB7CiAgICAiZmlsZXMiOiBbCiAgICAgIHsKICAgICAgICAiaWQiOiAiRkZJTEUiLAogICAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICAgInNpemUiOiAzLAogICAgICAgICJ1cmxfcHJpdmF0ZV9kb3dubG9hZCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICAgIH0KICAgIF0sCiAgICAidGV4dCI6ICJyZXBseSIsCiAgICAidGhyZWFkX3RzIjogIjkuMDAwMDAxIiwKICAgICJ0cyI6ICIxMC4wMDAwMDEiLAogICAgInVzZXIiOiAiVUFVVEhPUiIKICB9Cl0K",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_snapshot_orders_timestamps_numerically (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "9.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "9.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "9.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "9.000001",
+              "ts": "10.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "9.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICI0OTFhOTZkN2IzOGM5MzIyNDhmMTkwZTQ3YTI5YWI5NWQwMzI1NjA4YWJjNWMyOWM2NGU5ZjE5OWZjYzE0NjY4IiwKICAgICAgInNpemUiOiA2MzAKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJhdHRhY2htZW50cyI6IFsKICAgICAgewogICAgICAgICJpbWFnZV91cmwiOiAiaHR0cHM6Ly9leGFtcGxlLmludmFsaWQvcHJldmlldy5wbmciLAogICAgICAgICJ0aXRsZSI6ICJQcmV2aWV3IgogICAgICB9CiAgICBdLAogICAgImJsb2NrcyI6IFsKICAgICAgewogICAgICAgICJ0ZXh0IjogInNhZmUgZmFsbGJhY2siLAogICAgICAgICJ0eXBlIjogImZ1dHVyZV93aWRnZXQiCiAgICAgIH0KICAgIF0sCiAgICAiZmlsZXMiOiBbCiAgICAgIHsKICAgICAgICAiaWQiOiAiRkZJTEUiLAogICAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICAgInNpemUiOiAzLAogICAgICAgICJ1cmxfcHJpdmF0ZV9kb3dubG9hZCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICAgIH0KICAgIF0sCiAgICAidGV4dCI6ICJyZXBseSIsCiAgICAidGhyZWFkX3RzIjogIjEwMC4wMDAwMDEiLAogICAgInRzIjogIjEwMS4wMDAwMDEiLAogICAgInVzZXIiOiAiVUFVVEhPUiIKICB9Cl0K",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_snapshot_keeps_raw_preview_and_unknown_content_without_external_fetch (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "attachments": [
+                {
+                  "image_url": "https://example.invalid/preview.png",
+                  "title": "Preview"
+                }
+              ],
+              "blocks": [
+                {
+                  "text": "safe fallback",
+                  "type": "future_widget"
+                }
+              ],
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_unchanged_attachment_reuses_verified_previous_bytes (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_unchanged_attachment_reuses_verified_previous_bytes (call)",
+    "previous": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_changed_attachment_metadata_downloads_new_bytes (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "bmV4dA==",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYzZjMWM5YTljODU0M2YxZTRjZDk4MDA2NGNmMTYyNWVlYjYxYTkwNzAzYjI0NjRmZmYwMzlmMjE2ODI1MDhiMyIsCiAgICAgICJzaXplIjogNCwKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImM2YzFjOWE5Yzg1NDNmMWU0Y2Q5ODAwNjRjZjE2MjVlZWI2MWE5MDcwM2IyNDY0ZmZmMDM5ZjIxNjgyNTA4YjMiLAogICAgICAic2l6ZSI6IDQKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICI5YzYyMWMxZmQxYzIyZDQ2ZWI4ZTZhZDAxNzIxOWFkOTY5YjVkZjVjYTdlZDliNTNiMjgzNjNlOWVjMWYwZmJmIiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDQsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_changed_attachment_metadata_downloads_new_bytes (call)",
+    "previous": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 4,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "bmV4dA==",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_corrupt_cached_attachment_never_reused (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_corrupt_cached_attachment_never_reused (call)",
+    "previous": {
+      "files/FFILE.bin": "YmFk",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_verified_lazy_attachment_reused_without_network (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_verified_lazy_attachment_reused_without_network (call)",
+    "previous": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "expected": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "invalid": false,
+    "name": "test_deleted_file_never_satisfied_from_cached_bytes (call)",
+    "previous": null,
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "bytes": "YWJj",
+        "method": "download",
+        "url": "https://files.slack.com/files-pri/T/F/x"
+      },
+      {
+        "method": "chat.getPermalink",
+        "params": {
+          "channel": "CFIXTURE",
+          "message_ts": "100.000001"
+        },
+        "response": {
+          "ok": true,
+          "permalink": "https://example.slack.com/archives/CFIXTURE/p100000001"
+        }
+      }
+    ]
+  },
+  {
+    "channel": "CFIXTURE",
+    "invalid": true,
+    "name": "test_deleted_file_never_satisfied_from_cached_bytes (call)",
+    "previous": {
+      "files/FFILE.bin": "YWJj",
+      "manifest.json": "ewogICJjaGFubmVsIjogIkNGSVhUVVJFIiwKICAiZmlsZXMiOiBbCiAgICB7CiAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICJuYW1lIjogIi4uLy4uL2V2aWwuaHRtbCIsCiAgICAgICJwYXRoIjogImZpbGVzL0ZGSUxFLmJpbiIsCiAgICAgICJzaGEyNTYiOiAiYmE3ODE2YmY4ZjAxY2ZlYTQxNDE0MGRlNWRhZTIyMjNiMDAzNjFhMzk2MTc3YTljYjQxMGZmNjFmMjAwMTVhZCIsCiAgICAgICJzaXplIjogMywKICAgICAgInVybCI6ICJodHRwczovL2ZpbGVzLnNsYWNrLmNvbS9maWxlcy1wcmkvVC9GL3giCiAgICB9CiAgXSwKICAibWVzc2FnZV9jb3VudCI6IDIsCiAgIm9iamVjdHMiOiB7CiAgICAiZmlsZXMvRkZJTEUuYmluIjogewogICAgICAic2hhMjU2IjogImJhNzgxNmJmOGYwMWNmZWE0MTQxNDBkZTVkYWUyMjIzYjAwMzYxYTM5NjE3N2E5Y2I0MTBmZjYxZjIwMDE1YWQiLAogICAgICAic2l6ZSI6IDMKICAgIH0sCiAgICAibWVzc2FnZXMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJkNmYxYzcyZjBlZmI0MzcyMjA5ZWEzNWRmMDViMDhjZGQzZDQzOGUyMmI1ODM4MWMxOThhMWY1Zjc2YWNiZTY0IiwKICAgICAgInNpemUiOiAzOTUKICAgIH0sCiAgICAidXNlcnMuanNvbiI6IHsKICAgICAgInNoYTI1NiI6ICJlYjNlOTFkNzViN2NkODQ3MzBiYTgyOGYzMTBhNDUzMzE5YjE1YTUxMjVmMDUyNGY3OGEyMzQ1MmI4ZWY0ODRhIiwKICAgICAgInNpemUiOiAyMDcKICAgIH0KICB9LAogICJwZXJtYWxpbmsiOiAiaHR0cHM6Ly9leGFtcGxlLnNsYWNrLmNvbS9hcmNoaXZlcy9DRklYVFVSRS9wMTAwMDAwMDAxIiwKICAicm9vdF90cyI6ICIxMDAuMDAwMDAxIiwKICAic2NoZW1hIjogMSwKICAidGVhbV9pZCI6ICJURklYVFVSRSIKfQo=",
+      "messages.json": "WwogIHsKICAgICJyZXBseV9jb3VudCI6IDEsCiAgICAidGV4dCI6ICJyb290IiwKICAgICJ0cyI6ICIxMDAuMDAwMDAxIiwKICAgICJ1c2VyIjogIlVPV05FUiIKICB9LAogIHsKICAgICJmaWxlcyI6IFsKICAgICAgewogICAgICAgICJpZCI6ICJGRklMRSIsCiAgICAgICAgIm5hbWUiOiAiLi4vLi4vZXZpbC5odG1sIiwKICAgICAgICAic2l6ZSI6IDMsCiAgICAgICAgInVybF9wcml2YXRlX2Rvd25sb2FkIjogImh0dHBzOi8vZmlsZXMuc2xhY2suY29tL2ZpbGVzLXByaS9UL0YveCIKICAgICAgfQogICAgXSwKICAgICJ0ZXh0IjogInJlcGx5IiwKICAgICJ0aHJlYWRfdHMiOiAiMTAwLjAwMDAwMSIsCiAgICAidHMiOiAiMTAxLjAwMDAwMSIsCiAgICAidXNlciI6ICJVQVVUSE9SIgogIH0KXQo=",
+      "users.json": "ewogICJVQVVUSE9SIjogewogICAgImlkIjogIlVBVVRIT1IiLAogICAgInByb2ZpbGUiOiB7CiAgICAgICJkaXNwbGF5X25hbWUiOiAiRXhhbXBsZSBBdXRob3IiCiAgICB9CiAgfSwKICAiVU9XTkVSIjogewogICAgImlkIjogIlVPV05FUiIsCiAgICAicHJvZmlsZSI6IHsKICAgICAgImRpc3BsYXlfbmFtZSI6ICJFeGFtcGxlIEF1dGhvciIKICAgIH0KICB9Cn0K"
+    },
+    "root": {
+      "reply_count": 1,
+      "text": "root",
+      "ts": "100.000001",
+      "user": "UOWNER"
+    },
+    "team": "TFIXTURE",
+    "trace": [
+      {
+        "method": "conversations.replies",
+        "params": {
+          "channel": "CFIXTURE",
+          "limit": 100,
+          "ts": "100.000001"
+        },
+        "response": {
+          "has_more": false,
+          "messages": [
+            {
+              "reply_count": 1,
+              "text": "root",
+              "ts": "100.000001",
+              "user": "UOWNER"
+            },
+            {
+              "files": [
+                {
+                  "deleted": true,
+                  "id": "FFILE",
+                  "name": "../../evil.html",
+                  "size": 3,
+                  "url_private_download": "https://files.slack.com/files-pri/T/F/x"
+                }
+              ],
+              "text": "reply",
+              "thread_ts": "100.000001",
+              "ts": "101.000001",
+              "user": "UAUTHOR"
+            }
+          ],
+          "ok": true,
+          "response_metadata": {
+            "next_cursor": ""
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UOWNER"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UOWNER",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      },
+      {
+        "method": "users.info",
+        "params": {
+          "user": "UAUTHOR"
+        },
+        "response": {
+          "ok": true,
+          "user": {
+            "id": "UAUTHOR",
+            "profile": {
+              "display_name": "Example Author"
+            }
+          }
+        }
+      }
+    ]
+  }
+]

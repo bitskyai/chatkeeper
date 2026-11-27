@@ -1,0 +1,167 @@
+[
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "200.000001",
+      "score": -1.089108910891089e-06,
+      "snippet": "[searchable] archive archive archive"
+    },
+    {
+      "workspace": "two",
+      "channel": "COTHER",
+      "root_ts": "300.000001",
+      "score": -1e-06,
+      "snippet": "[searchable] release Ελληνικά"
+    },
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "100.000001",
+      "score": -9.243697478991598e-07,
+      "snippet": "[searchable] archive café 東京\nreply résumé"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "200.000001",
+      "score": -1.6417910447761196e-06,
+      "snippet": "searchable [archive] [archive] [archive]"
+    },
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "100.000001",
+      "score": -9.243697478991598e-07,
+      "snippet": "searchable [archive] café 東京\nreply résumé"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "100.000001",
+      "score": -9.243697478991598e-07,
+      "snippet": "searchable archive [café] 東京\nreply résumé"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "100.000001",
+      "score": -9.243697478991598e-07,
+      "snippet": "searchable archive café [東京]\nreply résumé"
+    }
+  ],
+  [
+    {
+      "workspace": "two",
+      "channel": "COTHER",
+      "root_ts": "300.000001",
+      "score": -1e-06,
+      "snippet": "searchable release [Ελληνικά]"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "200.000001",
+      "score": -1.6417910447761196e-06,
+      "snippet": "searchable [archive] [archive] [archive]"
+    },
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "100.000001",
+      "score": -9.243697478991598e-07,
+      "snippet": "searchable [archive] café 東京\nreply résumé"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "200.000001",
+      "score": -1.6417910447761196e-06,
+      "snippet": "searchable [archive] [archive] [archive]"
+    },
+    {
+      "workspace": "two",
+      "channel": "COTHER",
+      "root_ts": "300.000001",
+      "score": -1e-06,
+      "snippet": "searchable [release] Ελληνικά"
+    },
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "100.000001",
+      "score": -9.243697478991598e-07,
+      "snippet": "searchable [archive] café 東京\nreply résumé"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "200.000001",
+      "score": -1.6417910447761196e-06,
+      "snippet": "searchable [archive] [archive] [archive]"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "200.000001",
+      "score": -1.089108910891089e-06,
+      "snippet": "[searchable archive] archive archive"
+    },
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "100.000001",
+      "score": -9.243697478991598e-07,
+      "snippet": "[searchable archive] café 東京\nreply résumé"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "100.000001",
+      "score": -9.243697478991598e-07,
+      "snippet": "[searchable] archive café 東京\nreply résumé"
+    }
+  ],
+  [
+    {
+      "workspace": "two",
+      "channel": "COTHER",
+      "root_ts": "300.000001",
+      "score": -1e-06,
+      "snippet": "[searchable] release Ελληνικά"
+    }
+  ],
+  [
+    {
+      "workspace": "one",
+      "channel": "CFIXTURE",
+      "root_ts": "200.000001",
+      "score": -1.089108910891089e-06,
+      "snippet": "[searchable] archive archive archive"
+    },
+    {
+      "workspace": "two",
+      "channel": "COTHER",
+      "root_ts": "300.000001",
+      "score": -1e-06,
+      "snippet": "[searchable] release Ελληνικά"
+    }
+  ],
+  []
+]

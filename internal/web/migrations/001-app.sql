@@ -1,0 +1,3 @@
+CREATE TABLE sessions (id TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE setup_sessions (id TEXT PRIMARY KEY, platform TEXT NOT NULL, step INTEGER NOT NULL, data TEXT NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE events (id INTEGER PRIMARY KEY, workspace TEXT NOT NULL, channel TEXT NOT NULL, root TEXT NOT NULL, at INTEGER NOT NULL, UNIQUE(workspace,channel,root,at));

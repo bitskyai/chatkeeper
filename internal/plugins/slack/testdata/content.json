@@ -1,0 +1,2734 @@
+[
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": "<script> & label",
+                  "type": "message_mention",
+                  "url": "https://example.slack.com/archives/COTHER/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_rich_message_mention_preserves_validated_link_and_escapes_label (call)",
+    "texts": [
+      "<https://example.slack.com/archives/COTHER/p100000001|&lt;script&gt; &amp; label>"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": "label <bait>",
+                  "type": "message_mention",
+                  "url": "javascript:alert(1)"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_unsafe_message_mention_is_plain_text[javascript:alert(1)] (call)",
+    "texts": [
+      "label &lt;bait&gt;"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": "label <bait>",
+                  "type": "message_mention",
+                  "url": "https://example.invalid/a"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_unsafe_message_mention_is_plain_text[https://example.invalid/a] (call)",
+    "texts": [
+      "label &lt;bait&gt;"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": "label <bait>",
+                  "type": "message_mention",
+                  "url": "http://example.slack.com/archives/COTHER/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_unsafe_message_mention_is_plain_text[http://example.slack.com/archives/COTHER/p100000001] (call)",
+    "texts": [
+      "label &lt;bait&gt;"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": "label <bait>",
+                  "type": "message_mention",
+                  "url": "https://example.slack.com/archives/CWRONG/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_unsafe_message_mention_is_plain_text[https://example.slack.com/archives/CWRONG/p100000001] (call)",
+    "texts": [
+      "label &lt;bait&gt;"
+    ]
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "invalid",
+                  "text": "see this message",
+                  "type": "message_mention",
+                  "url": "https://example.slack.com/archives/COTHER/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_message_mentions_fail_closed[changes0] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "invalid",
+                  "message_ts": "100.000001",
+                  "text": "see this message",
+                  "type": "message_mention",
+                  "url": "https://example.slack.com/archives/COTHER/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_message_mentions_fail_closed[changes1] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "author_id": "invalid",
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": "see this message",
+                  "type": "message_mention",
+                  "url": "https://example.slack.com/archives/COTHER/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_message_mentions_fail_closed[changes2] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": "see this message",
+                  "thread_ts": "invalid",
+                  "type": "message_mention",
+                  "url": "https://example.slack.com/archives/COTHER/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_message_mentions_fail_closed[changes3] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": [],
+                  "type": "message_mention",
+                  "url": "https://example.slack.com/archives/COTHER/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_message_mentions_fail_closed[changes4] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "message_ts": "100.000001",
+                  "text": "see this message",
+                  "type": "message_mention",
+                  "url": 7
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_message_mentions_fail_closed[changes5] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "channel_id": "COTHER",
+                  "extra": "x",
+                  "message_ts": "100.000001",
+                  "text": "see this message",
+                  "type": "message_mention",
+                  "url": "https://example.slack.com/archives/COTHER/p100000001"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_message_mentions_fail_closed[changes6] (call)"
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "file_id": "FCANVAS",
+                  "type": "canvas"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_canvas_reference_is_text_and_never_downloaded (call)",
+    "texts": [
+      "canvas FCANVAS"
+    ]
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "type": "canvas"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_canvas_rejected[canvas0] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "file_id": "<bad>",
+                  "type": "canvas"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_canvas_rejected[canvas1] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "file_id": "F1",
+                  "type": "canvas",
+                  "url": "https://example.invalid/"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_malformed_canvas_rejected[canvas2] (call)"
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "attachments": [
+        {
+          "text": "<@UATTACHMENT>"
+        }
+      ],
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "type": "user",
+                  "user_id": "URICH"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ],
+      "text": "<@UTEXT>"
+    },
+    "name": "test_mentions_include_secondary_and_rich_user_elements (call)",
+    "texts": [
+      "<@URICH>",
+      "<@UATTACHMENT>"
+    ]
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "text": [
+                    "x"
+                  ],
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_unsupported_or_oversized_content_is_rejected[message0] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": [],
+                  "text": "x",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_unsupported_or_oversized_content_is_rejected[message1] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "accessory": {},
+          "text": {
+            "text": "x",
+            "type": "mrkdwn"
+          },
+          "type": "section"
+        }
+      ]
+    },
+    "name": "test_unsupported_or_oversized_content_is_rejected[message2] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "files": [
+        null
+      ]
+    },
+    "name": "test_unsupported_or_oversized_content_is_rejected[message3] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "attachments": [
+        null
+      ]
+    },
+    "name": "test_unsupported_or_oversized_content_is_rejected[message4] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        },
+        {
+          "type": "divider"
+        }
+      ]
+    },
+    "name": "test_unsupported_or_oversized_content_is_rejected[message5] (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "attachments": [
+        {
+          "fields": [
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            },
+            {
+              "title": "x"
+            }
+          ]
+        }
+      ]
+    },
+    "name": "test_unsupported_or_oversized_content_is_rejected[message6] (call)"
+  },
+  {
+    "files": [
+      {
+        "id": "FFILE"
+      }
+    ],
+    "invalid": false,
+    "message": {
+      "attachments": [
+        {
+          "fields": [
+            {
+              "title": "Field",
+              "value": "value"
+            }
+          ],
+          "files": [
+            {
+              "id": "FFILE"
+            }
+          ],
+          "text": "body",
+          "title": "Title"
+        }
+      ]
+    },
+    "name": "test_nested_attachment_files_and_text_are_preserved (call)",
+    "texts": [
+      "Title",
+      "body",
+      "Field",
+      "value"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "type": "usergroup",
+                  "usergroup_id": "SFIXTURE"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_common_rich_and_unknown_elements_have_safe_plain_text_fallback[element0-expected0] (call)",
+    "texts": [
+      "@SFIXTURE"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "fallback": "Nov 14",
+                  "format": "{date_short}",
+                  "timestamp": 1700000000,
+                  "type": "date"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_common_rich_and_unknown_elements_have_safe_plain_text_fallback[element1-expected1] (call)",
+    "texts": [
+      "Nov 14"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "alt_text": "An image",
+                  "image_url": "https://example.invalid/image.png",
+                  "type": "image"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_common_rich_and_unknown_elements_have_safe_plain_text_fallback[element2-expected2] (call)",
+    "texts": [
+      "An image"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "text": {
+                    "text": "Open discussion",
+                    "type": "plain_text"
+                  },
+                  "type": "button",
+                  "url": "https://example.invalid/discussion"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_common_rich_and_unknown_elements_have_safe_plain_text_fallback[element3-expected3] (call)",
+    "texts": [
+      "Open discussion",
+      "https://example.invalid/discussion"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "metadata": {
+                    "label": "A label"
+                  },
+                  "text": "<script>widget</script>",
+                  "type": "future_widget"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_common_rich_and_unknown_elements_have_safe_plain_text_fallback[element4-expected4] (call)",
+    "texts": [
+      "&lt;script&gt;widget&lt;/script&gt;",
+      "A label"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "attachments": [
+        {
+          "image_url": "https://example.invalid/image.png",
+          "text": "Preview text",
+          "thumb_url": "https://example.invalid/icon.png",
+          "title": "A repository",
+          "video_html": "<iframe src=\"https://example.invalid\"></iframe>"
+        }
+      ]
+    },
+    "name": "test_image_link_preview_preserves_labels_without_fetching_media (call)",
+    "texts": [
+      "A repository",
+      "Preview text"
+    ]
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "text": "x",
+                  "type": [
+                    "malformed"
+                  ]
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_non_string_block_type_is_archive_error (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "external_id": "remote-file",
+          "source": "remote",
+          "type": "file"
+        }
+      ]
+    },
+    "name": "test_file_block_without_downloadable_metadata_still_fails_closed (call)"
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "style": {
+            "color": "red"
+          },
+          "text": "Readable fallback",
+          "type": "future_widget"
+        }
+      ]
+    },
+    "name": "test_future_widget_style_metadata_does_not_block_text_capture (call)",
+    "texts": [
+      "Readable fallback"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "unlink": true
+                  },
+                  "text": "Keep this text",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_cosmetic_style_metadata_preserves_text_without_rendering_metadata[style0] (call)",
+    "texts": [
+      "Keep this text"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "highlight": true
+                  },
+                  "text": "Keep this text",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_cosmetic_style_metadata_preserves_text_without_rendering_metadata[style1] (call)",
+    "texts": [
+      "Keep this text"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "client_highlight": true
+                  },
+                  "text": "Keep this text",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_cosmetic_style_metadata_preserves_text_without_rendering_metadata[style2] (call)",
+    "texts": [
+      "Keep this text"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "underline": true
+                  },
+                  "text": "Keep this text",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_cosmetic_style_metadata_preserves_text_without_rendering_metadata[style3] (call)",
+    "texts": [
+      "Keep this text"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "bold": true,
+                    "future_cosmetic": true
+                  },
+                  "text": "Keep this text",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_cosmetic_style_metadata_preserves_text_without_rendering_metadata[style4] (call)",
+    "texts": [
+      "Keep this text"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "future_style": {
+                      "color": "blue",
+                      "keyframes": [
+                        {
+                          "offset": 0,
+                          "opacity": 1
+                        }
+                      ]
+                    }
+                  },
+                  "text": "Keep this text",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_cosmetic_style_metadata_preserves_text_without_rendering_metadata[style5] (call)",
+    "texts": [
+      "Keep this text"
+    ]
+  },
+  {
+    "files": [],
+    "invalid": false,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "image_url": "https://example.invalid/image.png",
+                    "label": "<script>ignored</script>"
+                  },
+                  "text": "Keep this text",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_cosmetic_style_metadata_preserves_text_without_rendering_metadata[style6] (call)",
+    "texts": [
+      "Keep this text"
+    ]
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "nested": {
+                      "nested": {
+                        "nested": {
+                          "nested": {
+                            "nested": {
+                              "nested": {
+                                "nested": {
+                                  "nested": {
+                                    "nested": {
+                                      "nested": {
+                                        "nested": {
+                                          "nested": {
+                                            "nested": {
+                                              "flag": true
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "text": "x",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_style_metadata_remains_subject_to_content_bounds (call)"
+  },
+  {
+    "invalid": true,
+    "message": {
+      "blocks": [
+        {
+          "block_id": "generated",
+          "elements": [
+            {
+              "elements": [
+                {
+                  "style": {
+                    "many": [
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false,
+                      false
+                    ]
+                  },
+                  "text": "x",
+                  "type": "text"
+                }
+              ],
+              "type": "rich_text_section"
+            }
+          ],
+          "type": "rich_text"
+        }
+      ]
+    },
+    "name": "test_style_metadata_remains_subject_to_content_bounds (call)"
+  }
+]

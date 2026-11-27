@@ -1,0 +1,20 @@
+{
+  "UAUTHOR": {
+    "id": "UAUTHOR",
+    "profile": {
+      "display_name": "Fixture author"
+    }
+  },
+  "UMENTION": {
+    "id": "UMENTION",
+    "profile": {
+      "display_name": "Fixture mention"
+    }
+  },
+  "UOWNER": {
+    "id": "UOWNER",
+    "profile": {
+      "display_name": "Fixture owner"
+    }
+  }
+}

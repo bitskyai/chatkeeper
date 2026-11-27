@@ -1,0 +1,19 @@
+server:
+  host: 127.0.0.1
+  port: 8787
+  token_env: CHATKEEPER_API_TOKEN
+workspaces:
+  - id: fixture
+    platform: slack
+    team_id: TFIXTURE
+    bot_token_env: FIXTURE_BOT_TOKEN
+    app_token_env: FIXTURE_APP_TOKEN
+    channels: [CFIXTURE]
+    poll_interval: 120
+    trigger:
+      reactions: [white_check_mark]
+      who: owner
+      owners: [UOWNER]
+    storage:
+      type: folder
+      path: ../data/fixture

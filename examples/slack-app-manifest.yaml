@@ -1,0 +1,27 @@
+display_information:
+  name: ChatKeeper
+  description: Archive threads you mark with a reaction
+features:
+  bot_user:
+    display_name: ChatKeeper
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - reactions:read
+      - files:read
+      - users:read
+settings:
+  event_subscriptions:
+    bot_events:
+      - reaction_added
+      - reaction_removed
+      - message.channels
+      - message.groups
+  socket_mode_enabled: true
+  org_deploy_enabled: false
+  token_rotation_enabled: false

@@ -1,0 +1,54 @@
+[
+  {
+    "blocks": [
+      {
+        "block_id": "synthetic",
+        "elements": [
+          {
+            "elements": [
+              {
+                "text": "fixture",
+                "type": "text"
+              }
+            ],
+            "type": "rich_text_section"
+          }
+        ],
+        "type": "rich_text"
+      }
+    ],
+    "files": [
+      {
+        "id": "FFILE",
+        "name": "fixture.bin",
+        "size": 5,
+        "url_private": "https://files.slack.com/files-pri/T/FFILE"
+      }
+    ],
+    "reactions": [
+      {
+        "count": 1,
+        "name": "white_check_mark",
+        "users": [
+          "UOWNER"
+        ]
+      }
+    ],
+    "reply_count": 2,
+    "text": "Synthetic caf\u00e9 \ud83d\ude00 <>& <@UMENTION>",
+    "ts": "100.000001",
+    "user": "UOWNER"
+  },
+  {
+    "text": "Synthetic reply",
+    "thread_ts": "100.000001",
+    "ts": "101.000001",
+    "user": "UAUTHOR"
+  },
+  {
+    "text": "Synthetic second reply",
+    "thread_ts": "100.000001",
+    "ts": "102.000001",
+    "user": "UAUTHOR"
+  }
+]

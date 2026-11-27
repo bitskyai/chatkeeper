@@ -1,0 +1,10 @@
+[
+ {"request":{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"golden-client","version":"1"}}},"expected":{"id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"chatkeeper","version":"0.3.0"},"capabilities":{"tools":{"listChanged":true}}}}},
+ {"request":{"jsonrpc":"2.0","method":"notifications/initialized"}},
+ {"request":{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}},"tool_names":["get_thread","list_workspaces","search_threads"]},
+ {"request":{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search_threads","arguments":{"q":"Synthetic","workspace":"fixture"}}},"expected":{"id":3,"result":{"structuredContent":{"results":[{"workspace":"fixture","channel":"CFIXTURE","root_ts":"100.000001"}],"next_cursor":null}}}},
+ {"request":{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_thread","arguments":{"workspace":"fixture","channel":"CFIXTURE","ts":"100.000001"}}},"expected":{"id":4,"result":{"structuredContent":{"workspace":"fixture","channel":"CFIXTURE","root_ts":"100.000001","manifest":{"schema":1,"message_count":2}}}}},
+ {"request":{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"list_workspaces","arguments":{}}},"expected":{"id":5,"result":{"structuredContent":{"workspaces":["fixture"]}}}},
+ {"request":{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"search_threads","arguments":{"q":"\""}}},"expected":{"id":6,"result":{"isError":true}}},
+ {"request":{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_thread","arguments":{"workspace":"fixture","channel":"CFIXTURE","ts":"999.000001"}}},"expected":{"id":7,"result":{"isError":true}}}
+]

@@ -1,0 +1,23 @@
+image:
+  repository: ghcr.io/bitskyai/chatkeeper
+  # Empty uses v + Chart.AppVersion; override for a prerelease.
+  tag: ""
+  pullPolicy: IfNotPresent
+service:
+  port: 8787
+allowedHosts: "localhost,127.0.0.1"
+secureCookies: false
+# Required existing Secret. Key admin-password must contain >=12 characters.
+existingSecret: chatkeeper
+# Additional existing Secrets containing platform credential environment variables.
+envFromSecrets: []
+persistence:
+  existingClaim: ""
+  size: 10Gi
+  storageClass: null
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 1Gi

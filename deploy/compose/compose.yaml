@@ -1,0 +1,28 @@
+services:
+  chatkeeper:
+    image: ghcr.io/bitskyai/chatkeeper:${CHATKEEPER_VERSION:-v0.1.0}
+    healthcheck:
+      test: ["CMD", "/chatkeeper", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CHATKEEPER_PORT:-8787}:8787"
+    environment:
+      CHATKEEPER_HOME: /data
+      CHATKEEPER_MODE: server
+      CHATKEEPER_ADMIN_PASSWORD: ${CHATKEEPER_ADMIN_PASSWORD:?Set an administrator password of at least 12 characters}
+      CHATKEEPER_ALLOWED_HOSTS: ${CHATKEEPER_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      CHATKEEPER_SECURE_COOKIES: ${CHATKEEPER_SECURE_COOKIES:-0}
+      CHATKEEPER_API_TOKEN: ${CHATKEEPER_API_TOKEN:-}
+    volumes:
+      - data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+volumes:
+  data:
