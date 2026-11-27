@@ -3,7 +3,7 @@ module github.com/bitskyai/chatkeeper
 go 1.26.0
 
 require (
-	github.com/coder/websocket v1.8.14 // Pure-Go outbound Socket Mode transport; no platform SDK.
+	github.com/coder/websocket v1.8.15 // Pure-Go outbound Socket Mode transport; no platform SDK.
 	go.yaml.in/yaml/v3 v3.0.4 // Maintained YAML parser; node API supports future comment-preserving edits.
 )
 
