@@ -99,6 +99,10 @@ func TestLauncherModeServerExitsWhenLauncherGoes(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	stderr, e := cmd.StderrPipe()
+	if e != nil {
+		t.Fatal(e)
+	}
 	if e = cmd.Start(); e != nil {
 		t.Fatal(e)
 	}
@@ -109,6 +113,7 @@ func TestLauncherModeServerExitsWhenLauncherGoes(t *testing.T) {
 		for s.Scan() {
 			if strings.HasPrefix(s.Text(), "Open ChatKeeper: ") {
 				started <- true
+				return
 			}
 		}
 		started <- false
@@ -124,6 +129,10 @@ func TestLauncherModeServerExitsWhenLauncherGoes(t *testing.T) {
 	if _, e = os.Stat(filepath.Join(home, "instance.url")); e != nil {
 		t.Fatal("instance.url missing while running:", e)
 	}
+	// The launcher dies: all three pipes lose their launcher end at once, so
+	// the shutdown notice to stderr must not kill the server with SIGPIPE.
+	_ = stdout.Close()
+	_ = stderr.Close()
 	_ = stdin.Close()
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
