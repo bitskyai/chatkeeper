@@ -305,8 +305,30 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 		ws.Storage = location
 		if v, has := raw["cleanup"]; has {
 			cleanup, ok := mapping(v)
-			if !ok || !keys(cleanup, "enabled", "token_env", "allow_others", "min_age_hours", "buffer_max_age_seconds", "own_only", "allow_zero_age") {
+			if !ok || !keys(cleanup, "enabled", "token_env", "allow_others", "min_age_hours", "buffer_max_age_seconds", "own_only", "allow_zero_age", "approval", "scope", "every_hours") {
 				return nil, ErrConfig
+			}
+			if v, has := cleanup["approval"]; has {
+				b, _ := json.Marshal(v)
+				var t pluginapi.Trigger
+				var fields map[string]any
+				if json.Unmarshal(b, &t) != nil || json.Unmarshal(b, &fields) != nil || !keys(fields, "who", "owners", "reactions", "match") || t.Who != "owner" || t.Match != "" && t.Match != "any" && t.Match != "all" {
+					return nil, ErrConfig
+				}
+				ws.Cleanup.Approval = &t
+			}
+			if v, has := cleanup["scope"]; has {
+				if v != "thread" && v != "messages" {
+					return nil, ErrConfig
+				}
+				ws.Cleanup.Scope = text(v)
+			}
+			if v, has := cleanup["every_hours"]; has {
+				n, ok := seconds(v)
+				if !ok || n < 0 || n > 1000000 || n > 0 && n < 1 {
+					return nil, ErrConfig
+				}
+				ws.Cleanup.Every = time.Duration(n * float64(time.Hour))
 			}
 			for _, k := range []string{"enabled", "allow_others", "own_only", "allow_zero_age"} {
 				if v, has := cleanup[k]; has {

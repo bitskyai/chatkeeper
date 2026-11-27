@@ -46,7 +46,29 @@ type Trigger struct {
 	Owners    []string `json:"owners" yaml:"owners"`
 	Match     string   `json:"match,omitempty" yaml:"match,omitempty"`
 }
+
+// CleanupApproval returns the explicit delete approval, or the legacy archive
+// trigger for configurations predating separate deletion approval.
+func (w Workspace) CleanupApproval() Trigger {
+	if w.Cleanup.Approval != nil {
+		return *w.Cleanup.Approval
+	}
+	return w.Trigger
+}
+
+type CleanupSetup struct {
+	Title, WizardTitle, Instructions, OAuthURL string
+	Members, Reactions                         []Choice
+}
+type CleanupConfigurator interface {
+	CleanupSetup(context.Context, Workspace, Env) (CleanupSetup, error)
+	TestCleanupCredential(context.Context, Workspace, Env, string, bool) error
+}
+
 type CleanupPolicy struct {
+	Approval    *Trigger
+	Scope       string
+	Every       time.Duration
 	Enabled     bool
 	AllowOthers bool
 	OwnOnly     bool

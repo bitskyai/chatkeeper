@@ -92,11 +92,11 @@ type card struct {
 	Ready    bool
 }
 type workspaceRow struct {
-	ID, State, Error, Transport, LastCapture string
-	Paused                                   bool
-	Fields                                   []field
-	Activity                                 []core.Activity
-	Report                                   *core.CheckReport
+	ID, State, Error, Transport, LastCapture, CleanupTitle string
+	Paused                                                 bool
+	Fields                                                 []field
+	Activity                                               []core.Activity
+	Report                                                 *core.CheckReport
 }
 type page struct {
 	Title, Kind, Body, CSRF, Error, Storage, Workspace, Reaction string
@@ -209,6 +209,8 @@ func NewApp(o Options) (*App, error) {
 	_, _ = a.db.Exec("UPDATE cleanup_runs SET status='interrupted' WHERE status='running'")
 	a.maintenanceDone = make(chan struct{})
 	go a.maintain()
+	a.cleanupJobs.Add(1)
+	go func() { defer a.cleanupJobs.Done(); a.scheduleCleanup(a.ctx) }()
 	return a, nil
 }
 func (a *App) Close() {
@@ -655,6 +657,9 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request, id, csrf string) {
 		return
 	}
 	if r.URL.Path == "/setup/finish" && r.Method == "POST" {
+		if a.offerCleanupStep(w, r, csrf, z, p) {
+			return
+		}
 		a.mu.Lock()
 		if a.wizards[id] == z {
 			delete(a.wizards, id)

@@ -674,3 +674,51 @@ func TestCleanupBlocksArchiveWithGaps(t *testing.T) {
 		t.Fatalf("%+v %v", r, d.calls)
 	}
 }
+
+func TestSeparateDeleteApprovalAndScope(t *testing.T) {
+	w, s := fixture(t)
+	w.Cleanup.Approval = &pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"wastebasket"}}
+	r := Run(context.Background(), w, s, nil, false)
+	if !strings.Contains(r.Threads[0].Reason, "owner trigger") {
+		t.Fatalf("archive reaction authorized deletion: %+v", r)
+	}
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	snap, _ := s.Read(context.Background(), k)
+	snap.Messages[1]["reactions"] = []any{map[string]any{"name": "wastebasket", "users": []any{"UOWNER"}, "count": 1}}
+	snap.Documents = nil
+	if _, e := s.Save(context.Background(), k, *snap); e != nil {
+		t.Fatal(e)
+	}
+	w.Cleanup.Scope = "messages"
+	d := &driver{}
+	r = Run(context.Background(), w, s, d, true)
+	if len(d.calls) != 1 || d.calls[0] != "1000000001.000001" || r.Threads[0].Status != "deleted" {
+		t.Fatalf("scope deleted unapproved content: %+v %v", r, d.calls)
+	}
+}
+func TestCleanupSpecificApprovalReasons(t *testing.T) {
+	for _, tc := range []struct {
+		t    pluginapi.Trigger
+		want string
+	}{{pluginapi.Trigger{Who: "owner"}, "no delete approval reaction"}, {pluginapi.Trigger{Who: "owner", Reactions: []string{"save"}}, "no cleanup owners"}} {
+		w, s := fixture(t)
+		w.Cleanup.Approval = &tc.t
+		r := Run(context.Background(), w, s, nil, false)
+		if !strings.Contains(r.Threads[0].Reason, tc.want) {
+			t.Fatalf("%+v", r)
+		}
+	}
+}
+
+func TestProgressPersistsEveryDeletion(t *testing.T) {
+	w, s := fixture(t)
+	notifications := 0
+	r := Run(context.Background(), w, s, &driver{}, true, func(r Report) {
+		if len(r.Threads) == 1 && r.Threads[0].Status == "partial" {
+			notifications++
+		}
+	})
+	if r.Threads[0].Status != "deleted" || notifications != 3 {
+		t.Fatalf("missing action progress %d %+v", notifications, r)
+	}
+}

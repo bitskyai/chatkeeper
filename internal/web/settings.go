@@ -37,6 +37,9 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request, csrf string, set
 			errText += ": " + health.LastError
 		}
 		wr := workspaceRow{ID: running.Entry.Workspace.ID, State: state, Error: errText, Transport: transport, LastCapture: last, Paused: running.Paused, Activity: running.Runtime.Activity()}
+		if _, ok := running.Entry.Plugin.(pluginapi.CleanupConfigurator); ok {
+			wr.CleanupTitle = "Delete from " + running.Entry.Plugin.Manifest().Name + " after archiving"
+		}
 		if len(wr.Activity) > 10 {
 			wr.Activity = wr.Activity[:10]
 		}
@@ -69,6 +72,10 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request, csrf string, set
 	a.render(w, pg)
 }
 func (a *App) settings(w http.ResponseWriter, r *http.Request, csrf string) {
+	if r.URL.Path == "/settings/cleanup" {
+		a.cleanupSettings(w, r, csrf, false)
+		return
+	}
 	if r.Method == "GET" {
 		a.dashboard(w, r, csrf, true)
 		return
