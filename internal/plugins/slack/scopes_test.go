@@ -43,3 +43,19 @@ func TestManifestCoversArchiveScopes(t *testing.T) {
 		}
 	}
 }
+
+func TestManifestCoversOwnPostCleanupScopes(t *testing.T) {
+	for _, scope := range requiredScopes {
+		if scope == "chat:write" {
+			t.Error("archive-only setup must not require cleanup permission")
+		}
+	}
+	for _, scope := range []string{"chat:write", "users:read", "channels:history", "groups:history"} {
+		if !strings.Contains(AppManifest, "      - "+scope+"\n") {
+			t.Errorf("own-post cleanup needs %s, which the manifest does not request", scope)
+		}
+	}
+	if optionalScopes["chat:write"] == "" {
+		t.Error("archive-only setup must explain the optional cleanup permission")
+	}
+}

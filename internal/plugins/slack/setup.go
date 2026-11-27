@@ -34,6 +34,7 @@ oauth_config:
       - files:read
       - users:read
       - emoji:read
+      - chat:write
 settings:
   event_subscriptions:
     bot_events:
@@ -49,7 +50,7 @@ settings:
 var requiredScopes = []string{"channels:history", "channels:read", "groups:history", "groups:read", "reactions:read", "files:read", "users:read"}
 
 // optionalScopes unlock extras; setup continues without them.
-var optionalScopes = map[string]string{"emoji:read": "custom workspace emoji in the reaction picker"}
+var optionalScopes = map[string]string{"emoji:read": "custom workspace emoji in the reaction picker", "chat:write": "optional cleanup of the bot’s own posts"}
 
 const createBody = `1. Click Create Slack app. Slack opens "Create an app" with ChatKeeper's manifest already filled in: choose your workspace, click Next, review, then Create. Every permission ChatKeeper needs, the reaction and message events, and Socket Mode are included.
 2. In the left menu open Install App, click Install to Workspace, then Allow.
