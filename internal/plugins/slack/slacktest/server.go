@@ -30,6 +30,15 @@ type Server struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	Overrides      map[string]func(http.ResponseWriter, *http.Request)
+	thread         []map[string]any
+}
+
+// SetThread replaces the synthetic thread: the first message is the root and
+// the rest are its replies. Mark still adds the trigger reaction to the root.
+func (s *Server) SetThread(messages ...map[string]any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.thread = messages
 }
 
 func New(t testing.TB) *Server {
@@ -159,7 +168,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.counts[method]++
 	s.requests = append(s.requests, request{method, r.Header.Get("Authorization")})
-	marked, replyMarked, reaction := s.marked, s.replyMarked, s.reaction
+	marked, replyMarked, reaction, thread := s.marked, s.replyMarked, s.reaction, s.thread
 	s.mu.Unlock()
 	if reaction == "" {
 		reaction = "white_check_mark"
@@ -177,6 +186,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	reply := map[string]any{"ts": "101.000001", "thread_ts": "100.000001", "user": "UAUTHOR", "text": "Synthetic reply"}
 	if replyMarked {
 		reply["reactions"] = []any{map[string]any{"name": reaction, "count": 1, "users": []string{"UOWNER"}}}
+	}
+	all := []any{root, reply}
+	if len(thread) > 0 {
+		root = map[string]any{}
+		for k, v := range thread[0] {
+			root[k] = v
+		}
+		root["reply_count"] = len(thread) - 1
+		if marked {
+			root["reactions"] = []any{map[string]any{"name": reaction, "count": 1, "users": []string{"UOWNER"}}}
+		}
+		all = []any{root}
+		for _, m := range thread[1:] {
+			all = append(all, m)
+		}
 	}
 	doc := map[string]any{"ok": true}
 	switch method {
@@ -197,7 +221,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case "conversations.history":
 		doc["messages"] = []any{root}
 	case "conversations.replies":
-		doc["messages"] = []any{root, reply}
+		doc["messages"] = all
 		if r.URL.Query().Get("limit") == "1" {
 			s.mu.Lock()
 			s.counts["conversations.replies/root"]++
@@ -208,8 +232,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		doc["type"] = "message"
 		doc["channel"] = r.URL.Query().Get("channel")
 		doc["message"] = root
-		if r.URL.Query().Get("timestamp") == reply["ts"] {
-			doc["message"] = reply
+		for _, m := range all[1:] {
+			if m := m.(map[string]any); r.URL.Query().Get("timestamp") == m["ts"] {
+				doc["message"] = m
+			}
 		}
 	case "users.info":
 		uid := r.URL.Query().Get("user")

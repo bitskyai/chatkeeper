@@ -10,12 +10,15 @@ import (
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Health struct {
 	State, ErrorClass string
+	// LastError is the redacted cause of the most recent failure, if any.
+	LastError         string
 	LastCapture       time.Time
 	Realtime          bool
 	RealtimeConnected bool
@@ -39,6 +42,12 @@ type Runtime struct {
 	checks                            chan checkRequest
 	activity                          []Activity
 	realtimeUp                        bool
+	// failures remembers the last reported cause per thread so a persistent
+	// failure is logged and shown once per change, not on every poll.
+	failures map[pluginapi.Key]string
+	// gaps holds items the last capture of a thread could not store.
+	gaps        map[pluginapi.Key][]pluginapi.Gap
+	lastPollErr string
 }
 
 func New(ws pluginapi.Workspace, p pluginapi.Plugin, env pluginapi.Env, store storage.Store) *Runtime {
@@ -48,9 +57,85 @@ func New(ws pluginapi.Workspace, p pluginapi.Plugin, env pluginapi.Env, store st
 	}
 	env.Credentials = scoped
 	env.Log = pluginapi.RedactingLogger(env.Log, scoped)
-	return &Runtime{Workspace: ws, Plugin: p, Env: env, Store: store, Queue: NewQueue(1024), HookTimeout: 30 * time.Second, StopTimeout: 10 * time.Second, Backoff: 5 * time.Second, marked: map[pluginapi.Key]bool{}, active: map[string]bool{}, watermarks: map[string]time.Time{}, checks: make(chan checkRequest)}
+	return &Runtime{Workspace: ws, Plugin: p, Env: env, Store: store, Queue: NewQueue(1024), HookTimeout: 30 * time.Second, StopTimeout: 10 * time.Second, Backoff: 5 * time.Second, marked: map[pluginapi.Key]bool{}, failures: map[pluginapi.Key]string{}, gaps: map[pluginapi.Key][]pluginapi.Gap{}, active: map[string]bool{}, watermarks: map[string]time.Time{}, checks: make(chan checkRequest)}
 }
 func (r *Runtime) Health() Health { r.mu.RLock(); defer r.mu.RUnlock(); return r.health }
+
+// Cause renders an error for users and logs: credential values of this
+// workspace and credential-shaped text are removed and the length is bounded.
+func (r *Runtime) Cause(e error) string {
+	if e == nil {
+		return ""
+	}
+	secrets := make([]string, 0, len(r.Env.Credentials))
+	for _, v := range r.Env.Credentials {
+		secrets = append(secrets, v)
+	}
+	return pluginapi.Redact(e.Error(), secrets...)
+}
+func (r *Runtime) logger() *slog.Logger {
+	if r.Env.Log != nil {
+		return r.Env.Log
+	}
+	return slog.Default()
+}
+func (r *Runtime) setLastError(cause string) {
+	r.mu.Lock()
+	r.health.LastError = cause
+	r.mu.Unlock()
+}
+
+// noteResult logs and records a thread capture failure once per distinct cause,
+// and records a successful capture that stored only part of the thread.
+func (r *Runtime) noteResult(ctx context.Context, k pluginapi.Key, changed bool, e error) {
+	if e != nil {
+		if ctx.Err() != nil || errors.Is(e, context.Canceled) {
+			return
+		}
+		cause := r.Cause(e)
+		r.setLastError(cause)
+		if r.failures[k] == cause {
+			return
+		}
+		r.failures[k] = cause
+		r.logger().Warn("thread archive failed", "workspace", r.Workspace.ID, "channel", k.Channel, "root", k.RootTS, "error", cause)
+		r.record("error", "Archive failed for "+k.Channel+" / "+k.RootTS+": "+cause)
+		return
+	}
+	if _, failed := r.failures[k]; failed {
+		delete(r.failures, k)
+		r.logger().Info("thread archive recovered", "workspace", r.Workspace.ID, "channel", k.Channel, "root", k.RootTS)
+	}
+	if gaps := r.gaps[k]; changed && len(gaps) > 0 {
+		summary := GapSummary(gaps)
+		r.logger().Warn("thread archived with missing items", "workspace", r.Workspace.ID, "channel", k.Channel, "root", k.RootTS, "missing", len(gaps), "detail", summary)
+		r.record("archive", "Archived thread "+k.Channel+" / "+k.RootTS+"; "+summary)
+	}
+}
+
+// GapSummary describes missing archive items in one bounded line.
+func GapSummary(gaps []pluginapi.Gap) string {
+	if len(gaps) == 0 {
+		return ""
+	}
+	parts := []string{}
+	for i, g := range gaps {
+		if i >= 3 {
+			parts = append(parts, fmt.Sprintf("and %d more", len(gaps)-i))
+			break
+		}
+		item := g.Kind
+		if g.ID != "" {
+			item += " " + g.ID
+		}
+		parts = append(parts, item+" ("+g.Reason+")")
+	}
+	noun := "item"
+	if len(gaps) != 1 {
+		noun = "items"
+	}
+	return pluginapi.Redact(fmt.Sprintf("%d %s not captured: %s", len(gaps), noun, strings.Join(parts, "; ")))
+}
 func (r *Runtime) state(state, class string) {
 	r.mu.Lock()
 	r.health.State = state
@@ -76,6 +161,11 @@ func (r *Runtime) now() time.Time {
 func (r *Runtime) Refresh(ctx context.Context, s pluginapi.Session, k pluginapi.Key) (bool, error) {
 	return r.refresh(ctx, s, k, "")
 }
+func (r *Runtime) refresh(ctx context.Context, s pluginapi.Session, k pluginapi.Key, item string) (bool, error) {
+	changed, e := r.capture(ctx, s, k, item)
+	r.noteResult(ctx, k, changed, e)
+	return changed, e
+}
 
 // triggered applies the rule to the root and, for a realtime reaction on a
 // reply (item), to that reply as re-read from the source. Polling passes no
@@ -95,7 +185,7 @@ func (r *Runtime) triggered(ctx context.Context, s pluginapi.Session, k pluginap
 	}
 	return Matches(r.Workspace.Trigger, pluginapi.Root{TS: k.RootTS, Reactions: reply.Reactions})
 }
-func (r *Runtime) refresh(ctx context.Context, s pluginapi.Session, k pluginapi.Key, item string) (bool, error) {
+func (r *Runtime) capture(ctx context.Context, s pluginapi.Session, k pluginapi.Key, item string) (bool, error) {
 	root, e := Call(ctx, r.HookTimeout, func(c context.Context) (pluginapi.Root, error) { return s.Root(c, k.Channel, k.RootTS) })
 	if e != nil {
 		return false, e
@@ -143,6 +233,11 @@ func (r *Runtime) refresh(ctx context.Context, s pluginapi.Session, k pluginapi.
 		return false, e
 	}
 	r.marked[k] = true
+	if len(snapshot.Manifest.Gaps) > 0 {
+		r.gaps[k] = snapshot.Manifest.Gaps
+	} else {
+		delete(r.gaps, k)
+	}
 	if r.OnArchive != nil {
 		r.OnArchive(k)
 	}
@@ -153,11 +248,7 @@ func (r *Runtime) refresh(ctx context.Context, s pluginapi.Session, k pluginapi.
 		r.mu.Lock()
 		r.health.LastCapture = r.now()
 		r.mu.Unlock()
-		logger := r.Env.Log
-		if logger == nil {
-			logger = slog.Default()
-		}
-		logger.Info("thread archived", "workspace", r.Workspace.ID, "channel", k.Channel, "root", k.RootTS)
+		r.logger().Info("thread archived", "workspace", r.Workspace.ID, "channel", k.Channel, "root", k.RootTS, "missing_items", len(snapshot.Manifest.Gaps))
 		r.record("archive", "Archived thread "+k.Channel+" / "+k.RootTS)
 	}
 	return changed, nil
@@ -238,7 +329,7 @@ func (r *Runtime) backfill(ctx context.Context, s pluginapi.Session, trace *Chec
 		if e != nil {
 			lastErr = e
 			if report != nil {
-				report.Error = e.Error()
+				report.Error = r.Cause(e)
 			}
 		} else {
 			r.watermarks[channel] = now
@@ -308,7 +399,7 @@ func (r *Runtime) backfill(ctx context.Context, s pluginapi.Session, trace *Chec
 			}
 			ok, e := r.Refresh(ctx, s, k)
 			if report != nil {
-				report.result(k.RootTS, ok, r.marked[k], e)
+				report.result(k.RootTS, ok, r.marked[k], r.Cause(e), r.gaps[k])
 			}
 			if fatal(e) {
 				return changed, e
@@ -330,7 +421,16 @@ func (r *Runtime) backfill(ctx context.Context, s pluginapi.Session, trace *Chec
 	r.mu.Unlock()
 	summary := fmt.Sprintf("Checked %d channels, %d thread roots, %d matched, %d archived or updated", len(channels), scanned, candidates, changed)
 	if lastErr != nil {
-		summary += "; some reads failed: " + lastErr.Error()
+		cause := r.Cause(lastErr)
+		summary += "; some reads failed: " + cause
+		r.setLastError(cause)
+		if cause != r.lastPollErr {
+			r.logger().Warn("poll had failures", "workspace", r.Workspace.ID, "error", cause)
+		}
+		r.lastPollErr = cause
+	} else {
+		r.lastPollErr = ""
+		r.setLastError("")
 	}
 	r.record("poll", summary)
 	if full && lastErr == nil {
@@ -354,6 +454,12 @@ func (r *Runtime) Run(ctx context.Context) {
 				r.state("stopped", "")
 			}
 			return
+		}
+		if e != nil {
+			cause := r.Cause(e)
+			r.setLastError(cause)
+			r.logger().Warn("workspace session failed", "workspace", r.Workspace.ID, "class", class(e), "error", cause)
+			r.record("error", "Session failed ("+class(e)+"): "+cause)
 		}
 		if errors.Is(e, ErrTimeout) {
 			r.state("quarantined", "timeout")
@@ -411,15 +517,12 @@ func (r *Runtime) runOnce(ctx context.Context) error {
 			defer close(startDone)
 			var startErr error
 			defer func() {
-				if recover() != nil {
-					startErr = ErrPanic
+				if v := recover(); v != nil {
+					startErr = containPanic(v)
 				}
 				realtime <- startErr
 			}()
-			startErr = s.Start(child, r.enqueue)
-			if startErr != nil {
-				startErr = ErrPlugin
-			}
+			startErr = Contain(s.Start(child, r.enqueue))
 		}()
 	}
 	interval := r.Workspace.PollInterval
@@ -444,7 +547,7 @@ func (r *Runtime) runOnce(ctx context.Context) error {
 		select {
 		case e := <-realtime:
 			if e == nil {
-				e = ErrPlugin
+				e = &PluginError{Cause: "live event connection ended"}
 			}
 			return e
 		case req := <-r.checks:
@@ -500,11 +603,7 @@ func (s Supervisor) Run(ctx context.Context) {
 func (r *Runtime) enqueue(e pluginapi.Event) bool {
 	ok := r.Queue.Push(e)
 	if !ok {
-		logger := r.Env.Log
-		if logger == nil {
-			logger = slog.Default()
-		}
-		logger.Warn("capture queue overflow; full repair scheduled")
+		r.logger().Warn("capture queue overflow; full repair scheduled")
 	}
 	return ok
 }

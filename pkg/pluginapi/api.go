@@ -164,6 +164,18 @@ type ArchiveManifest struct {
 	MessageCount int               `json:"message_count"`
 	Objects      map[string]Object `json:"objects"`
 	Files        []Attachment      `json:"files"`
+	// Gaps lists items the source referenced but the capture could not store
+	// (an unreadable file or author, for example). The rest of the thread is kept.
+	Gaps []Gap `json:"gaps,omitempty"`
+}
+
+// Gap is one referenced item that is missing from an archive, with a short,
+// credential-free reason suitable for display.
+type Gap struct {
+	Kind    string `json:"kind"`
+	ID      string `json:"id,omitempty"`
+	Message string `json:"message,omitempty"`
+	Reason  string `json:"reason"`
 }
 type Snapshot struct {
 	// CleanupStatus summarizes the journal state for archive readers.

@@ -23,20 +23,25 @@ func TestContent(t *testing.T) {
 		bad       bool
 	}{
 		{"canvas", `{"blocks":[{"type":"canvas","file_id":"FCANVAS"}]}`, []string{"canvas FCANVAS"}, false},
-		{"bad canvas", `{"blocks":[{"type":"canvas","file_id":"F1","url":"https://example.invalid"}]}`, nil, true},
-		{"file block", `{"blocks":[{"type":"file","external_id":"x"}]}`, nil, true},
+		{"extra canvas fields", `{"blocks":[{"type":"canvas","file_id":"F1","url":"https://example.invalid"}]}`, []string{"canvas F1"}, false},
+		{"file block", `{"blocks":[{"type":"file","external_id":"x"}]}`, []string{"file x"}, false},
 		{"preview", `{"attachments":[{"title":"Title","text":"Preview","image_url":"https://example.invalid","video_html":"<iframe>"}]}`, []string{"Title", "Preview"}, false},
 		{"future", `{"blocks":[{"type":"future_widget","text":"<script>widget</script>","metadata":{"label":"A label"}}]}`, []string{"&lt;script&gt;widget&lt;/script&gt;", "A label"}, false},
 		{"style", `{"blocks":[{"type":"text","text":"Keep","style":{"image_url":"https://example.invalid","label":"ignored","nested":{"flag":true}}}]}`, []string{"Keep"}, false},
-		{"bad style", `{"blocks":[{"type":"text","text":"x","style":[]}]}`, nil, true},
-		{"bad type", `{"blocks":[{"type":[]}]}`, nil, true},
-		{"bad text", `{"blocks":[{"type":"text","text":[]}]}`, nil, true},
-		{"accessory", `{"blocks":[{"type":"section","accessory":{}}]}`, nil, true},
-		{"bad files", `{"files":[null]}`, nil, true},
-		{"bad attachments", `{"attachments":[null]}`, nil, true},
+		{"odd style", `{"blocks":[{"type":"text","text":"x","style":[]}]}`, []string{"x"}, false},
+		{"list style string", `{"blocks":[{"type":"rich_text","elements":[{"type":"rich_text_list","style":"bullet","indent":0,"border":0,"elements":[{"type":"rich_text_section","elements":[{"type":"text","text":"first"}]},{"type":"rich_text_section","elements":[{"type":"text","text":"second","style":{"bold":true}}]}]}]}]}`, []string{"first", "second"}, false},
+		{"button style string", `{"blocks":[{"type":"actions","elements":[{"type":"button","style":"primary","text":{"type":"plain_text","text":"Review"},"url":"https://example.invalid/pr/1"}]}]}`, []string{"Review", "https://example.invalid/pr/1"}, false},
+		{"bad type", `{"blocks":[{"type":[]}]}`, nil, false},
+		{"bad text", `{"blocks":[{"type":"text","text":[]}]}`, nil, false},
+		{"accessory", `{"blocks":[{"type":"section","accessory":{}}]}`, nil, false},
+		{"bad files", `{"files":[null]}`, nil, false},
+		{"bad attachments", `{"attachments":[null]}`, nil, false},
+		{"null attachment fields", `{"attachments":[{"title":null,"text":"PR opened","fields":[{"title":"Repo","value":null},null]}]}`, []string{"PR opened", "Repo"}, false},
+		{"too deep", `{"blocks":[{"type":"x","a":` + strings.Repeat(`{"a":`, 40) + `{}` + strings.Repeat(`}`, 40) + `}]}`, nil, true},
+		{"too many", `{"blocks":[{"type":"x","a":[` + strings.TrimSuffix(strings.Repeat(`[],`, 60000), ",") + `]}]}`, nil, true},
 		{"mention", `{"blocks":[{"type":"message_mention","message_ts":"100.000001","channel_id":"COTHER","url":"https://fixture.slack.com/archives/COTHER/p100000001","text":"<script> & label"}]}`, []string{"<https://fixture.slack.com/archives/COTHER/p100000001|&lt;script&gt; &amp; label>"}, false},
 		{"unsafe mention", `{"blocks":[{"type":"message_mention","message_ts":"100.000001","channel_id":"COTHER","url":"javascript:alert(1)","text":"label <bait>"}]}`, []string{"label &lt;bait&gt;"}, false},
-		{"bad mention", `{"blocks":[{"type":"message_mention","message_ts":"bad","channel_id":"COTHER"}]}`, nil, true},
+		{"bad mention", `{"blocks":[{"type":"message_mention","message_ts":"bad","channel_id":"COTHER"}]}`, []string{"Slack message"}, false},
 		{"usergroup", `{"blocks":[{"type":"usergroup","usergroup_id":"SFIXTURE"}]}`, []string{"@SFIXTURE"}, false},
 		{"date", `{"blocks":[{"type":"date","timestamp":1700000000,"fallback":"Fixture date"}]}`, []string{"Fixture date"}, false},
 		{"user", `{"blocks":[{"type":"user","user_id":"URICH"}]}`, []string{"<@URICH>"}, false},
@@ -47,7 +52,7 @@ func TestContent(t *testing.T) {
 			if (e != nil) != tc.bad {
 				t.Fatal(e)
 			}
-			if !tc.bad && !reflect.DeepEqual(got, tc.want) {
+			if !tc.bad && len(got)+len(tc.want) > 0 && !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("%#v want %#v", got, tc.want)
 			}
 		})

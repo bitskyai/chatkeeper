@@ -466,8 +466,11 @@ func Validate(k pluginapi.Key, v pluginapi.Snapshot) error {
 			return e
 		}
 		ts, ok := msg["ts"].(string)
-		user, uok := msg["user"].(string)
-		if !ok || !uok || !segment.MatchString(ts) || !segment.MatchString(user) || seen[ts] || i == 0 && ts != k.RootTS {
+		// The author reference is optional (posts by integrations have none);
+		// when present it must be a valid segment with a user record.
+		rawUser, hasUser := msg["user"]
+		user, uok := rawUser.(string)
+		if !ok || hasUser && (!uok || !segment.MatchString(user)) || !segment.MatchString(ts) || seen[ts] || i == 0 && ts != k.RootTS {
 			return ErrIntegrity
 		}
 		seen[ts] = true
@@ -480,13 +483,15 @@ func Validate(k pluginapi.Key, v pluginapi.Snapshot) error {
 				return ErrIntegrity
 			}
 		}
-		author := v.Users[user]
-		if author == nil || author["id"] != user {
-			return ErrIntegrity
-		}
-		if profile, has := author["profile"]; has {
-			if _, ok := profile.(map[string]any); !ok {
+		if hasUser {
+			author := v.Users[user]
+			if author == nil || author["id"] != user {
 				return ErrIntegrity
+			}
+			if profile, has := author["profile"]; has {
+				if _, ok := profile.(map[string]any); !ok {
+					return ErrIntegrity
+				}
 			}
 		}
 	}
@@ -511,6 +516,11 @@ func Validate(k pluginapi.Key, v pluginapi.Snapshot) error {
 	}
 	if len(found) != len(v.Blobs) {
 		return ErrIntegrity
+	}
+	for _, g := range m.Gaps {
+		if g.Kind == "" || g.Reason == "" || len(g.Kind)+len(g.ID)+len(g.Message)+len(g.Reason) > 2048 {
+			return ErrIntegrity
+		}
 	}
 	return nil
 }

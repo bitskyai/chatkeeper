@@ -2,7 +2,10 @@ package core
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
+	"strings"
 	"testing"
 	"time"
 )
@@ -54,7 +57,7 @@ func TestQueueBoundAndCoalescing(t *testing.T) {
 	}
 }
 func TestGuardPanicAndHang(t *testing.T) {
-	if e := Guard(context.Background(), time.Second, func(context.Context) error { panic("secret") }); e != ErrPanic {
+	if e := Guard(context.Background(), time.Second, func(context.Context) error { panic("secret") }); !errors.Is(e, ErrPanic) || e.Error() != ErrPanic.Error() {
 		t.Fatal(e)
 	}
 	done := make(chan struct{})
@@ -123,5 +126,37 @@ func TestQueuePreservesDistinctReplyCandidates(t *testing.T) {
 	}
 	if !seen["2.0"] || !seen["3.0"] || len(seen) != 2 {
 		t.Fatal("reply candidates overwritten", seen)
+	}
+}
+
+func TestPluginErrorKeepsRedactedCause(t *testing.T) {
+	e := Guard(context.Background(), time.Second, func(context.Context) error {
+		return errors.New("users.info failed: Authorization: Bearer xoxb-1-2-secretvalue at https://api.example.invalid/x?token=hidden")
+	})
+	if !errors.Is(e, ErrPlugin) || errors.Is(e, ErrTimeout) || errors.Is(e, ErrPanic) {
+		t.Fatal(e)
+	}
+	msg := e.Error()
+	if !strings.HasPrefix(msg, "plugin failure: users.info failed") || strings.Contains(msg, "secretvalue") || strings.Contains(msg, "hidden") {
+		t.Fatal(msg)
+	}
+	// A plugin cannot impersonate core sentinels to force a quarantine.
+	if e := Guard(context.Background(), time.Second, func(context.Context) error { return ErrTimeout }); errors.Is(e, ErrTimeout) || !errors.Is(e, ErrPlugin) {
+		t.Fatal(e)
+	}
+	if e := Guard(context.Background(), time.Second, func(context.Context) error { return context.Canceled }); e != context.Canceled {
+		t.Fatal(e)
+	}
+	// Runtime faults keep their description; arbitrary panic values are dropped.
+	e = Guard(context.Background(), time.Second, func(context.Context) error {
+		list := func() []int { return nil }
+		return errors.New(fmt.Sprint(list()[1]))
+	})
+	if !errors.Is(e, ErrPanic) || !strings.Contains(e.Error(), "index out of range") {
+		t.Fatal(e)
+	}
+	r := &Runtime{Env: pluginapi.Env{Credentials: pluginapi.Credentials{"bot_token": "custom-credential-value"}}}
+	if got := r.Cause(errors.New("rejected custom-credential-value")); strings.Contains(got, "custom-credential-value") {
+		t.Fatal(got)
 	}
 }

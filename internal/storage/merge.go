@@ -164,6 +164,15 @@ func merge(old, fresh pluginapi.Snapshot, now string) (pluginapi.Snapshot, error
 		fresh.Manifest.Files = append(fresh.Manifest.Files, v)
 	}
 	sort.Slice(fresh.Manifest.Files, func(i, j int) bool { return fresh.Manifest.Files[i].ID < fresh.Manifest.Files[j].ID })
+	// A file kept from an earlier generation is no longer missing.
+	var gaps []pluginapi.Gap
+	for _, g := range fresh.Manifest.Gaps {
+		if _, kept := files[g.ID]; g.Kind == "file" && g.ID != "" && kept {
+			continue
+		}
+		gaps = append(gaps, g)
+	}
+	fresh.Manifest.Gaps = gaps
 	return fresh, nil
 }
 

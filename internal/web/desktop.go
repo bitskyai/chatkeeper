@@ -23,6 +23,7 @@ type desktopWorkspace struct {
 	Plugin      string `json:"plugin"`
 	State       string `json:"state"`
 	ErrorClass  string `json:"error_class,omitempty"`
+	LastError   string `json:"last_error,omitempty"`
 	Realtime    bool   `json:"realtime"`
 	Paused      bool   `json:"paused"`
 	LastCapture string `json:"last_capture,omitempty"`
@@ -124,7 +125,7 @@ func (a *App) desktopStatus(now time.Time) desktopStatus {
 		if state == "failed" || state == "quarantined" {
 			failing = true
 		}
-		dw := desktopWorkspace{ID: running.Entry.Workspace.ID, Plugin: running.Entry.Plugin.Manifest().ID, State: state, ErrorClass: h.ErrorClass, Realtime: h.Realtime, Paused: running.Paused}
+		dw := desktopWorkspace{ID: running.Entry.Workspace.ID, Plugin: running.Entry.Plugin.Manifest().ID, State: state, ErrorClass: h.ErrorClass, LastError: h.LastError, Realtime: h.Realtime, Paused: running.Paused}
 		if !h.LastCapture.IsZero() {
 			dw.LastCapture = h.LastCapture.UTC().Format(time.RFC3339)
 			if h.LastCapture.After(last) {
