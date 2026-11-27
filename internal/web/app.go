@@ -98,6 +98,7 @@ type workspaceRow struct {
 	Fields                                                 []field
 	Activity                                               []core.Activity
 	Report                                                 *core.CheckReport
+	Upgrades                                               []pluginapi.Link
 }
 type page struct {
 	Title, Kind, Body, CSRF, Error, Storage, Workspace, Reaction string
@@ -109,6 +110,8 @@ type page struct {
 	Activity                                                     []core.Activity
 	Messages                                                     []string
 	Links                                                        []pluginapi.Link
+	Copy                                                         []copyItem
+	StepID                                                       string
 	Fields                                                       []field
 	Cards                                                        []card
 	Workspaces                                                   []workspaceRow
@@ -741,7 +744,7 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request, id, csrf string) {
 		if e == nil {
 			e = prepareErr
 		}
-		pg := page{Title: step.Title, Kind: "step", Body: step.Body, CSRF: csrf, Step: z.Step + 1, Steps: len(steps) + 2, Links: append(append([]pluginapi.Link{}, step.Links...), prepared.Links...), Fields: schemaFields(step.Schema), CanBack: z.Step > 0, Skip: step.Skip, CanTest: step.Test != nil}
+		pg := page{Title: step.Title, Kind: "step", Body: step.Body, CSRF: csrf, Step: z.Step + 1, Steps: len(steps) + 2, Links: mergeLinks(step.Links, prepared.Links, result.Links), Copy: copyItems(step.Copy), Fields: schemaFields(step.Schema), CanBack: z.Step > 0, Skip: step.Skip, CanTest: step.Test != nil}
 		if r.Method == "GET" {
 			pg.Messages = append(pg.Messages, z.Messages...)
 			pg.Checks = z.Checks

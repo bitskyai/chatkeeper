@@ -250,6 +250,11 @@ type CleanupDriver interface {
 }
 type Link struct{ Label, URL string }
 
+// CopyText is a value the user copies into the platform's own settings, such
+// as a permission name or a configuration document. Values containing a newline
+// render as a collapsible block.
+type CopyText struct{ Label, Value string }
+
 // Choice is a selectable option. Glyph, Image and Group are optional display hints
 // (for example an emoji character, a custom image URL and a picker category).
 type Choice struct {
@@ -294,9 +299,15 @@ type StepResult struct {
 // Prepare runs when the page is shown (dynamic links, choices); Test runs the
 // "Test connection" action without advancing. Skip, when set, labels an explicit
 // fallback action that clears this step's secret fields and then calls Run.
+// Copy lists values shown with a copy button. Upgrade, when set, labels a
+// dashboard action that reopens this step for an existing workspace whose
+// secret fields from this step are unset; Prepare, Test and Run then receive the
+// workspace's settings as SetupState and its saved credentials.
 type SetupStep struct {
 	ID, Title, Kind, Body string
 	Links                 []Link
+	Copy                  []CopyText
+	Upgrade               string
 	Schema                json.RawMessage
 	Run                   func(context.Context, SetupState, json.RawMessage, Env) (StepResult, error)
 	Prepare               func(context.Context, SetupState, Env) (StepResult, error)

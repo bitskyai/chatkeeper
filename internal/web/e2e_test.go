@@ -43,6 +43,16 @@ func TestBrowserWizard(t *testing.T) {
 				w.Header().Set("X-OAuth-Scopes", scopes)
 				fmt.Fprint(w, `{"ok":true,"team":"Fixture","team_id":"TFIXTURE","user":"fixturebot","user_id":"UBOT","bot_id":"BFIXTURE"}`)
 			}
+			fake.Overrides["apps.connections.open"] = func(w http.ResponseWriter, r *http.Request) {
+				switch r.Header.Get("Authorization") {
+				case "Bearer xapp-other-app":
+					fmt.Fprint(w, `{"ok":true,"url":"wss://socket.slack.com/socket?app=AOTHER"}`)
+				case "Bearer xapp-no-scope":
+					fmt.Fprint(w, `{"ok":false,"error":"missing_scope"}`)
+				default:
+					fmt.Fprint(w, `{"ok":true,"url":"wss://socket.slack.com/socket"}`)
+				}
+			}
 			fake.Overrides["conversations.list"] = func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Query().Get("cursor") == "synthetic-next" {
 					fmt.Fprint(w, `{"ok":true,"channels":[{"id":"COTHER","name":"needs-invite","is_member":false}],"response_metadata":{"next_cursor":""}}`)
@@ -113,7 +123,8 @@ func TestBrowserWizard(t *testing.T) {
 			}
 			capture("platforms")
 			click("form:has(input[value=slack]) button")
-			run(title("Create your Slack app"), has("only shows the bot token"))
+			run(title("Create your Slack app"), has("only shows the bot token"), has("App manifest (YAML)"))
+			run(chromedp.Poll(`document.querySelector('a[href^="https://api.slack.com/apps?new_app=1&manifest_yaml="]') !== null`, nil))
 			capture("create-app")
 			next("Paste your bot token")
 			capture("tokens")
@@ -134,6 +145,7 @@ func TestBrowserWizard(t *testing.T) {
 			next("Add the app-level token")
 			// Item 1: the app-level token guidance deep-links the app's settings.
 			run(chromedp.Poll(`document.querySelector('a[href="https://api.slack.com/apps/AFIXTURE/general"]') !== null`, nil), has("App-Level Tokens"), has("connections:write"))
+			run(chromedp.Poll(`document.querySelector('a[href="https://api.slack.com/apps/AFIXTURE/socket-mode"]') !== null && document.querySelector('[data-copy]') !== null`, nil))
 			capture("app-token")
 			// Item 2: Back keeps the bot token server-side.
 			back("Paste your bot token")
@@ -143,6 +155,15 @@ func TestBrowserWizard(t *testing.T) {
 				click(`button[value=skip]`)
 				run(title("Choose channels"), has("Polling only"))
 			} else {
+				// Wrong scope and wrong app show the exact fix before the good token.
+				run(chromedp.SendKeys("input[name=app_token]", "xapp-no-scope"))
+				click(`button[value=test]`)
+				run(has("lacks connections:write"))
+				capture("app-token-scope")
+				run(chromedp.SendKeys("input[name=app_token]", "xapp-other-app"))
+				click(`button[value=test]`)
+				run(has("different Slack app (AOTHER)"))
+				capture("app-token-other-app")
 				run(chromedp.SendKeys("input[name=app_token]", "xapp-synthetic"))
 				click(`button[value=test]`)
 				run(has("connected (hello received)"))
@@ -225,6 +246,19 @@ func TestBrowserWizard(t *testing.T) {
 			run(has("Synthetic reply"))
 			run(chromedp.Navigate(server.URL+"/"), title("Your threads, kept safe"), has("Recent capture events"), has("Archived thread CFIXTURE / 100.000001"))
 			capture("dashboard")
+			if mode == "desktop" {
+				// Polling-only workspaces offer Enable instant capture, which
+				// reopens the app-level token step and switches to live events.
+				click("a.upgrade")
+				run(title("Add the app-level token"), has("Workspace fixture"))
+				run(chromedp.Poll(`document.querySelector('a[href="https://api.slack.com/apps/AFIXTURE/general"]') !== null`, nil))
+				capture("enable-instant")
+				run(chromedp.SendKeys("input[name=app_token]", "xapp-synthetic"))
+				click(`button[value=save]`)
+				run(title("Your threads, kept safe"), has("Live events"))
+				run(chromedp.Poll(`document.querySelector('a.upgrade') === null`, nil))
+				capture("dashboard-live")
+			}
 			run(chromedp.SetValue(`form[action="/search"] input[name="q"]`, "Synthetic", chromedp.ByQuery))
 			click(`form[action="/search"] button`)
 			run(chromedp.Poll("document.querySelector('article h2 a') !== null", nil))

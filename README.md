@@ -139,12 +139,19 @@ The wizard guides these steps and checks credentials before saving a workspace:
    workspace emoji to the reaction picker). Install it and copy the bot token,
    then click **Test connection** to see the workspace, bot user and every
    granted or missing scope.
-2. Slack's Install App page shows only the bot token. For instant capture, the
-   wizard links to your app's Basic Information page: under App-Level Tokens,
-   generate a token with `connections:write` and test the Socket Mode connection.
-   The manifest already enables Socket Mode and subscribes `reaction_added`,
-   `reaction_removed`, `message.channels` and `message.groups`. Without an app
-   token choose **Continue with polling only**.
+2. Slack's Install App page shows only the bot token. For instant capture you
+   also need an app-level token (`xapp-`). Slack has no API that creates one, so
+   the wizard looks up your app from the bot token and deep-links its Basic
+   Information page: under App-Level Tokens click **Generate Token and Scopes**,
+   name it `chatkeeper`, add the single scope `connections:write`, generate,
+   copy and paste. **Test connection** opens a real Socket Mode session and
+   checks the token belongs to the same app as the bot token; revoked tokens,
+   a missing scope, the wrong token type, another app's token or Socket Mode
+   switched off each show the exact fix and link. The manifest already enables
+   Socket Mode and subscribes `reaction_added`, `reaction_removed`,
+   `message.channels` and `message.groups`. Without an app token choose
+   **Continue with polling only** (checks every two minutes); the dashboard's
+   **Enable instant capture** reopens this step later.
 3. Invite the bot to each watched channel, including private channels, then
    select channels and one or more reactions. Every step has **Back**; entered
    values are kept and secrets stay server-side (shown as saved).
