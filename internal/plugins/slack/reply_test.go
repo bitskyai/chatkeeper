@@ -2,11 +2,13 @@ package slack_test
 
 import (
 	"context"
+	"fmt"
 	"github.com/bitskyai/chatkeeper/internal/core"
 	"github.com/bitskyai/chatkeeper/internal/plugins/slack"
 	"github.com/bitskyai/chatkeeper/internal/plugins/slack/slacktest"
 	"github.com/bitskyai/chatkeeper/internal/storage"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -122,5 +124,75 @@ func TestSkinToneReactionsMatchBaseName(t *testing.T) {
 	}
 	if _, e := (slack.Plugin{}).ParseWorkspace(context.Background(), []byte(`{"team_id":"TFIXTURE","trigger":{"reactions":["+1::skin-tone-9"]}}`), nil); e == nil {
 		t.Fatal("invalid tone accepted")
+	}
+}
+
+func TestReplyRecoveryReadsAllPagesAndReportsFailure(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprint(fail), func(t *testing.T) {
+			fake := slacktest.New(t)
+			fake.Overrides["conversations.replies"] = func(w http.ResponseWriter, r *http.Request) {
+				r.ParseForm()
+				if r.Form.Get("cursor") == "" {
+					fmt.Fprint(w, `{"ok":true,"messages":[{"ts":"100.000001","reply_count":201}],"response_metadata":{"next_cursor":"next"}}`)
+					return
+				}
+				if fail {
+					fmt.Fprint(w, `{"ok":false,"error":"internal_error"}`)
+					return
+				}
+				fmt.Fprint(w, `{"ok":true,"messages":[{"ts":"101.000001","thread_ts":"100.000001","reactions":[{"name":"bookmark","users":["UOWNER"],"count":1}]}]}`)
+			}
+			ws := pluginapi.Workspace{Settings: pluginapi.Settings(`{"team_id":"TFIXTURE"}`)}
+			s, e := (slack.Plugin{}).NewSession(context.Background(), ws, pluginapi.Env{HTTP: fake.Client(), Credentials: pluginapi.Credentials{"bot_token": "xoxb-synthetic"}})
+			if e != nil {
+				t.Fatal(e)
+			}
+			replies, e := s.(pluginapi.ReplyInspector).ReplyReactions(context.Background(), []pluginapi.RootRef{{Channel: "CFIXTURE", RootTS: "100.000001", Replies: 201}}, []string{"bookmark"})
+			if fail {
+				if e == nil {
+					t.Fatal("reply recovery swallowed a failed page")
+				}
+				return
+			}
+			if e != nil || len(replies) != 1 || replies[0].TS != "101.000001" {
+				t.Fatal("recovery missed reply after first page", replies, e)
+			}
+		})
+	}
+}
+
+func TestFullReplyRecoveryBoundsEachThreadRead(t *testing.T) {
+	fake := slacktest.New(t)
+	fake.Overrides["conversations.history"] = func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"ok":true,"messages":[`)
+		for i := 100; i < 110; i++ {
+			if i > 100 {
+				fmt.Fprint(w, ",")
+			}
+			fmt.Fprintf(w, `{"ts":"%d.000001","reply_count":1}`, i)
+		}
+		fmt.Fprint(w, `]}`)
+	}
+	fake.Overrides["conversations.replies"] = func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(20 * time.Millisecond)
+		r.ParseForm()
+		fmt.Fprintf(w, `{"ok":true,"messages":[{"ts":%q}]}`, r.Form.Get("ts"))
+	}
+	ws := pluginapi.Workspace{ID: "fixture", Platform: "slack", Channels: []string{"CFIXTURE"}, Settings: pluginapi.Settings(`{"team_id":"TFIXTURE"}`), Trigger: pluginapi.Trigger{Who: "any", Reactions: []string{"bookmark"}}}
+	env := pluginapi.Env{HTTP: fake.Client(), Credentials: pluginapi.Credentials{"bot_token": "xoxb-synthetic", "app_token": "xapp-synthetic"}}
+	s, e := (slack.Plugin{}).NewSession(context.Background(), ws, env)
+	if e != nil {
+		t.Fatal(e)
+	}
+	store, e := storage.Open(t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer store.Close()
+	runtime := core.New(ws, slack.Plugin{}, env, store)
+	runtime.HookTimeout = 100 * time.Millisecond
+	if _, e := runtime.Backfill(context.Background(), s); e != nil {
+		t.Fatal("full recovery timed out across individually healthy thread reads", e)
 	}
 }

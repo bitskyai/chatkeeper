@@ -1097,7 +1097,7 @@ func (a *App) checkNow(ctx context.Context, z *wizard) {
 	for _, running := range a.Manager.List() {
 		if running.Entry.Workspace.ID == z.Workspace {
 			ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
-			report := running.Runtime.CheckNow(ctx)
+			report := a.Manager.CheckNow(ctx, z.Workspace)
 			cancel()
 			z.Report = &report
 			return
@@ -1109,6 +1109,8 @@ func (a *App) checkNow(ctx context.Context, z *wizard) {
 func transportLabel(running *app.Running) string {
 	health := running.Runtime.Health()
 	switch {
+	case running.Suspended:
+		return "Paused for cleanup"
 	case running.Paused:
 		return "Paused"
 	case health.State == "starting" || health.State == "":

@@ -349,7 +349,7 @@ func (c *CheckReport) hints() {
 			continue
 		}
 		if c.Realtime {
-			add("Found :%s: on a reply (%s) in thread %s. Live events archive a thread when a trigger reaction is added to a reply, but this scan only reads reactions on the first message. If live events were disconnected when it was added, remove and re-add it, or add it to the first message.", reply.Name, reply.TS, reply.RootTS)
+			add("Found :%s: on a reply (%s) in thread %s. Live events archive reply reactions as they arrive. Full scans also recover reply reactions added while live events were disconnected.", reply.Name, reply.TS, reply.RootTS)
 		} else {
 			add("Found :%s: on a reply (%s) in thread %s. Polling only reads reactions on the first message of a thread; add it there, or enable live events to archive from reply reactions.", reply.Name, reply.TS, reply.RootTS)
 		}
@@ -375,6 +375,6 @@ func (c *CheckReport) hints() {
 	} else if !c.RealtimeConnected && c.RealtimeDetail != "" {
 		add("Live events are configured but not connected: %s Polling still runs every %s (first-message reactions only).", c.RealtimeDetail, c.Interval)
 	} else {
-		add("Live events are connected: a trigger reaction on any message in a thread, including replies, archives it as soon as it is added. Polling every %s re-checks reactions on first messages only.", c.Interval)
+		add("Live events are connected: a trigger reaction on any message in a thread, including replies, archives it as soon as it is added. Polling every %s re-checks first-message reactions; full scans also recover missed reply reactions.", c.Interval)
 	}
 }

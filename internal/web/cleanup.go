@@ -137,18 +137,28 @@ func (a *App) cleanupPage(w http.ResponseWriter, r *http.Request, session, csrf 
 					http.Error(w, "Cleanup credential unavailable or invalid", http.StatusConflict)
 					return
 				}
-				starting, _ := json.Marshal(cleanup.Report{Workspace: id, Reason: "Starting cleanup"})
-				result, e := a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) VALUES(?,unixepoch(),?,'running')", id, string(starting))
+				runID, e := a.claimCleanupRun(id, "Starting cleanup")
 				if e != nil {
 					http.Error(w, "Cannot start cleanup", 500)
 					return
 				}
-				runID, _ := result.LastInsertId()
+				if runID == 0 {
+					http.Error(w, "Cleanup already running", http.StatusConflict)
+					return
+				}
 				a.cleanupJobs.Add(1)
 				go func() {
 					defer a.cleanupJobs.Done()
+					report := cleanup.Report{Workspace: id, Reason: "Cannot suspend capture for cleanup"}
+					resume, err := a.Manager.SuspendCapture(id)
+					if err != nil {
+						b, _ := json.Marshal(report)
+						_, _ = a.db.Exec("UPDATE cleanup_runs SET report=?,status='complete' WHERE id=?", string(b), runID)
+						return
+					}
+					defer resume()
 					store, err := storage.Open(ws.Storage)
-					report := cleanup.Report{Workspace: id, Reason: "Archive unavailable"}
+					report.Reason = "Archive unavailable"
 					if err == nil {
 						defer store.Close()
 						report = cleanup.ApplyBoundProgress(a.ctx, ws, store, d, approved, func(progress cleanup.Report) {
@@ -190,4 +200,19 @@ func (a *App) cleanupPage(w http.ResponseWriter, r *http.Request, session, csrf 
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = cleanupTemplate.Execute(w, pg)
+}
+
+// claimCleanupRun atomically excludes manual and scheduled runs for a workspace.
+// A skipped run creates no row, preserving the scheduler's last-run time.
+func (a *App) claimCleanupRun(id, reason string) (int64, error) {
+	starting, _ := json.Marshal(cleanup.Report{Workspace: id, Reason: reason})
+	result, err := a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) SELECT ?,unixepoch(),?,'running' WHERE NOT EXISTS (SELECT 1 FROM cleanup_runs WHERE workspace=? AND status='running')", id, string(starting), id)
+	if err != nil {
+		return 0, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil || n == 0 {
+		return 0, err
+	}
+	return result.LastInsertId()
 }

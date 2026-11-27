@@ -43,6 +43,7 @@ func TestCleanupApplySurvivesRequestCancellation(t *testing.T) {
 	if e = os.WriteFile(filepath.Join(home, "config.yaml"), []byte(cfg), 0600); e != nil {
 		t.Fatal(e)
 	}
+	var a *web.App
 	fake := slacktest.New(t)
 	entered := make(chan struct{})
 	release := make(chan struct{})
@@ -60,9 +61,12 @@ func TestCleanupApplySurvivesRequestCancellation(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "messages": msgs})
 	}
 	fake.Overrides["chat.delete"] = func(w http.ResponseWriter, r *http.Request) {
+		if !a.Manager.IsSuspended("fixture") {
+			t.Error("manual deletion ran alongside capture")
+		}
 		fmt.Fprint(w, `{"ok":true,"channel":"CFIXTURE","ts":"100.000001"}`)
 	}
-	a, e := web.NewApp(web.Options{Home: home, Mode: "desktop", Host: "127.0.0.1", LaunchToken: "synthetic-launch", HTTP: fake.Client()})
+	a, e = web.NewApp(web.Options{Home: home, Mode: "desktop", Host: "127.0.0.1", LaunchToken: "synthetic-launch", HTTP: fake.Client()})
 	if e != nil {
 		t.Fatal(e)
 	}

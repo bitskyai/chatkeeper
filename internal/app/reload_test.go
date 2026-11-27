@@ -183,3 +183,181 @@ func TestWatcherDoesNotReadUnchangedSecrets(t *testing.T) {
 		t.Fatal("unchanged watcher read credentials", s.reads.Load()-before)
 	}
 }
+
+func TestCaptureSuspensionPreservesNestedAndUserPause(t *testing.T) {
+	home := t.TempDir()
+	p := filepath.Join(home, "config.yaml")
+	data := fmt.Sprintf("workspaces:\n- id: fixture\n  platform: slack\n  team_id: TFIXTURE\n  bot_token_env: SYNTHETIC_BOT\n  storage: {path: %q}\n", filepath.Join(home, "archive"))
+	if e := os.WriteFile(p, []byte(data), 0600); e != nil {
+		t.Fatal(e)
+	}
+	fake := slacktest.New(t)
+	m := app.New(context.Background(), p, &countedSecrets{}, fake.Client())
+	defer m.Close()
+	if e := m.Reload(); e != nil {
+		t.Fatal(e)
+	}
+	before := m.List()[0]
+	resume1, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if m.List()[0].Paused || m.IsPaused("fixture") {
+		t.Fatal("cleanup leaked into user pause")
+	}
+	if !m.List()[0].Suspended {
+		t.Fatal("capture still running during cleanup")
+	}
+	if m.List()[0].Runtime == before.Runtime {
+		t.Fatal("capture runtime was not drained")
+	}
+	resume2, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	resume1()
+	resume1()
+	if !m.List()[0].Suspended {
+		t.Fatal("nested cleanup resumed capture early")
+	}
+	m.SetPaused("fixture", true)
+	resume2()
+	if !m.List()[0].Paused {
+		t.Fatal("cleanup erased explicit user pause")
+	}
+	if e := m.Pause("fixture"); e != nil {
+		t.Fatal(e)
+	}
+	if m.List()[0].Paused {
+		t.Fatal("user could not resume after cleanup")
+	}
+	resume3, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	resume3()
+	if m.List()[0].Paused {
+		t.Fatal("cleanup did not restore active capture")
+	}
+}
+
+func TestCaptureSuspensionBeforeRuntimeStarts(t *testing.T) {
+	home := t.TempDir()
+	p := filepath.Join(home, "config.yaml")
+	data := fmt.Sprintf("workspaces:\n- id: fixture\n  platform: slack\n  team_id: TFIXTURE\n  bot_token_env: SYNTHETIC_BOT\n  storage: {path: %q}\n", filepath.Join(home, "archive"))
+	if e := os.WriteFile(p, []byte(data), 0600); e != nil {
+		t.Fatal(e)
+	}
+	fake := slacktest.New(t)
+	m := app.New(context.Background(), p, &countedSecrets{}, fake.Client())
+	defer m.Close()
+	resume, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e := m.Reload(); e != nil {
+		t.Fatal(e)
+	}
+	if !m.List()[0].Suspended {
+		t.Fatal("startup bypassed active cleanup lease")
+	}
+	resume()
+	if m.List()[0].Paused {
+		t.Fatal("startup remained paused after cleanup")
+	}
+}
+
+// Failed secret resolution must keep retrying without a file change.
+func TestResumeRetriesRepeatedFailures(t *testing.T) {
+	home := t.TempDir()
+	p := filepath.Join(home, "config.yaml")
+	data := fmt.Sprintf("workspaces:\n- id: fixture\n  platform: slack\n  team_id: TFIXTURE\n  bot_token_env: SYNTHETIC_BOT\n  storage: {path: %q}\n", filepath.Join(home, "archive"))
+	if e := os.WriteFile(p, []byte(data), 0600); e != nil {
+		t.Fatal(e)
+	}
+	s := &failingSecrets{}
+	fake := slacktest.New(t)
+	m := app.New(context.Background(), p, s, fake.Client())
+	defer m.Close()
+	if e := m.Reload(); e != nil {
+		t.Fatal(e)
+	}
+	resume, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	s.fail.Store(true)
+	resume()
+	if m.Failure() == "" {
+		t.Fatal("resume failure hidden")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go m.Watch(ctx)
+	// Force at least two failed attempts, then recover without changing YAML.
+	deadline := time.Now().Add(15 * time.Second)
+	for s.failures.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if s.failures.Load() < 3 {
+		t.Fatal("resume retry stopped after second failure")
+	}
+	s.fail.Store(false)
+	deadline = time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		r := m.List()[0]
+		if !r.Suspended && !r.Paused && r.Runtime.Health().State == "running" && m.Failure() == "" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("resume never recovered", m.Failure())
+}
+
+type failingSecrets struct {
+	fail     atomic.Bool
+	failures atomic.Int32
+}
+
+func (s *failingSecrets) Get(k string) (string, string, error) {
+	if s.fail.Load() {
+		if k == "SYNTHETIC_BOT" {
+			s.failures.Add(1)
+		}
+		return "", "", fmt.Errorf("synthetic resolution failure")
+	}
+	return (&countedSecrets{}).Get(k)
+}
+
+func TestReplyReactionDuringSuspensionRecoveredByFullBackfill(t *testing.T) {
+	home := t.TempDir()
+	p := filepath.Join(home, "config.yaml")
+	t.Setenv("SYNTHETIC_BOT", "xoxb-synthetic")
+	t.Setenv("SYNTHETIC_APP", "xapp-synthetic")
+	data := fmt.Sprintf("workspaces:\n- id: fixture\n  platform: slack\n  team_id: TFIXTURE\n  channels: [CFIXTURE]\n  bot_token_env: SYNTHETIC_BOT\n  app_token_env: SYNTHETIC_APP\n  trigger: {who: any, reactions: [bookmark]}\n  storage: {path: %q}\n", filepath.Join(home, "archive"))
+	if e := os.WriteFile(p, []byte(data), 0600); e != nil {
+		t.Fatal(e)
+	}
+	fake := slacktest.New(t)
+	m := app.New(context.Background(), p, nil, fake.Client())
+	defer m.Close()
+	if e := m.Reload(); e != nil {
+		t.Fatal(e)
+	}
+	resume, e := m.SuspendCapture("fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	fake.SetReaction("bookmark")
+	fake.MarkReply(true)
+	resume()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		keys, e := m.List()[0].Store.Keys(context.Background())
+		if e == nil && len(keys) == 1 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("reply reaction added during cleanup lost on resume")
+}

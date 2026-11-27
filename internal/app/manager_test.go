@@ -5,9 +5,11 @@ import (
 	"errors"
 	"github.com/bitskyai/chatkeeper/internal/config"
 	"github.com/bitskyai/chatkeeper/internal/search"
+	"github.com/bitskyai/chatkeeper/internal/storage"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestReloadInvalidRetainsConfiguration(t *testing.T) {
@@ -55,5 +57,48 @@ func TestRetrySearchOwnershipAfterBootstrap(t *testing.T) {
 	m.reloadIfChanged()
 	if m.Generation() != 1 || m.Failure() != "" {
 		t.Fatal("unchanged config did not retry transient writer ownership", m.Generation(), m.Failure())
+	}
+}
+
+func TestCaptureSuspensionWaitsForRuntimeDrain(t *testing.T) {
+	home := t.TempDir()
+	p := filepath.Join(home, "config.yaml")
+	if err := os.WriteFile(p, []byte("workspaces: []\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := storage.Open(filepath.Join(home, "archive"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := New(context.Background(), p, nil, nil)
+	defer m.Close()
+	stopped, drained := make(chan struct{}), make(chan struct{})
+	m.running["fixture"] = &Running{Store: store, cancel: func() { close(stopped) }, done: drained}
+	returned := make(chan error, 1)
+	go func() {
+		resume, err := m.SuspendCapture("fixture")
+		if err == nil {
+			resume()
+		}
+		returned <- err
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("capture not canceled")
+	}
+	select {
+	case err := <-returned:
+		t.Fatalf("returned before capture drained: %v", err)
+	default:
+	}
+	close(drained)
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("suspension did not finish after drain")
 	}
 }

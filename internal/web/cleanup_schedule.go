@@ -34,7 +34,11 @@ func (a *App) runScheduledCleanup(ctx context.Context, now time.Time) {
 	}
 	for _, entry := range cfg.Workspaces {
 		ws := entry.Workspace
-		if a.Manager.IsPaused(ws.ID) || !ws.Cleanup.Enabled || ws.Cleanup.Every <= 0 {
+		if a.Manager.IsPaused(ws.ID) || a.Manager.IsSuspended(ws.ID) || !ws.Cleanup.Enabled || ws.Cleanup.Every <= 0 {
+			continue
+		}
+		var active int
+		if a.db.QueryRow("SELECT COUNT(*) FROM cleanup_runs WHERE workspace=? AND status='running'", ws.ID).Scan(&active) != nil || active > 0 {
 			continue
 		}
 		var last int64
@@ -61,12 +65,17 @@ func (a *App) runScheduledCleanup(ctx context.Context, now time.Time) {
 }
 func (a *App) applyScheduled(ctx context.Context, entry config.Entry) {
 	ws := entry.Workspace
-	start, _ := json.Marshal(cleanup.Report{Workspace: ws.ID, Reason: "Starting automatic cleanup"})
-	result, e := a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) VALUES(?,unixepoch(),?,'running')", ws.ID, string(start))
-	if e != nil {
+	runID, e := a.claimCleanupRun(ws.ID, "Starting automatic cleanup")
+	if e != nil || runID == 0 {
 		return
 	}
-	runID, _ := result.LastInsertId()
+	resume, err := a.Manager.SuspendCapture(ws.ID)
+	if err != nil {
+		report, _ := json.Marshal(cleanup.Report{Workspace: ws.ID, Reason: "Automatic cleanup: cannot suspend capture"})
+		_, _ = a.db.Exec("UPDATE cleanup_runs SET report=?,status='complete' WHERE id=?", string(report), runID)
+		return
+	}
+	defer resume()
 	report := cleanup.Report{Workspace: ws.ID, Reason: "Automatic cleanup: archive unavailable"}
 	store, e := storage.Open(ws.Storage)
 	if e == nil {

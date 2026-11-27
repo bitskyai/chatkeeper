@@ -488,14 +488,12 @@ func (s *Session) ReplyReactions(ctx context.Context, roots []pluginapi.RootRef,
 		if !id(root.Channel, "channel") || !id(root.RootTS, "ts") {
 			continue
 		}
-		doc, e := s.client.Call(ctx, "conversations.replies", url.Values{"channel": {root.Channel}, "ts": {root.RootTS}, "limit": {"200"}})
+		entries, e := s.pages(ctx, "conversations.replies", url.Values{"channel": {root.Channel}, "ts": {root.RootTS}, "limit": {"200"}})
 		if e != nil {
-			return out, nil
+			return out, e
 		}
-		entries, _ := doc["messages"].([]any)
-		for _, raw := range entries {
-			m, ok := raw.(map[string]any)
-			if !ok || str(m["ts"]) == root.RootTS {
+		for _, m := range entries {
+			if str(m["ts"]) == root.RootTS {
 				continue
 			}
 			reply, e := normalizeRoot(map[string]any{"ts": "0.0", "reactions": m["reactions"]})

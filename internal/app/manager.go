@@ -23,13 +23,15 @@ type SecretResolver interface {
 	Get(string) (string, string, error)
 }
 type Running struct {
-	Entry       config.Entry
-	Runtime     *core.Runtime
-	Store       *storage.Folder
-	cancel      context.CancelFunc
-	done        chan struct{}
-	fingerprint [32]byte
-	Paused      bool
+	Entry            config.Entry
+	Runtime          *core.Runtime
+	Store            *storage.Folder
+	cancel           context.CancelFunc
+	done             chan struct{}
+	fingerprint      [32]byte
+	Paused           bool
+	Suspended        bool
+	SuspensionReason string
 }
 type Manager struct {
 	mu         sync.Mutex
@@ -46,13 +48,16 @@ type Manager struct {
 	closed     bool
 	OnCapture  func(string, pluginapi.Key)
 	Search     *search.Service
+	suspended  map[string]int
 	paused     map[string]bool
 	watched    [2]os.FileInfo
 	retry      bool
+	retryDelay time.Duration
+	retryAt    time.Time
 }
 
 func New(ctx context.Context, path string, secrets SecretResolver, client *http.Client) *Manager {
-	return &Manager{ctx: ctx, Path: path, Secrets: secrets, HTTP: client, running: map[string]*Running{}, paused: map[string]bool{}}
+	return &Manager{ctx: ctx, Path: path, Secrets: secrets, HTTP: client, running: map[string]*Running{}, paused: map[string]bool{}, suspended: map[string]int{}}
 }
 func (m *Manager) Generation() int { m.mu.Lock(); defer m.mu.Unlock(); return m.generation }
 func (m *Manager) List() []*Running {
@@ -97,8 +102,18 @@ func (m *Manager) Reload() error {
 	defer m.reloadMu.Unlock()
 	return m.reload()
 }
-func (m *Manager) reload() error {
-	m.retry = false
+func (m *Manager) reload() (err error) {
+	defer func() {
+		if err != nil {
+			m.retry = true
+			m.setError(m.Failure() + "; capture configuration retry pending")
+			slog.Warn("capture configuration failed; retry pending")
+		} else {
+			m.retry = false
+			m.retryDelay = 0
+			m.retryAt = time.Time{}
+		}
+	}()
 	m.watched = m.fileStats()
 	m.mu.Lock()
 	closed, current, generation := m.closed, m.running, m.generation
@@ -130,7 +145,8 @@ func (m *Manager) reload() error {
 			W pluginapi.Workspace
 			C map[string]string
 			P bool
-		}{entry.Workspace, entry.Credentials, m.paused[entry.Workspace.ID]})
+			S bool
+		}{entry.Workspace, entry.Credentials, m.paused[entry.Workspace.ID], m.suspended[entry.Workspace.ID] > 0})
 		fp := sha256.Sum256(b)
 		if prior := current[entry.Workspace.ID]; prior != nil && prior.fingerprint == fp {
 			next[entry.Workspace.ID] = prior
@@ -144,7 +160,10 @@ func (m *Manager) reload() error {
 			m.setError("Cannot open archive; running configuration retained")
 			return errors.New("cannot open archive")
 		}
-		r := &Running{Entry: entry, Store: store, cancel: func() {}, done: make(chan struct{}), fingerprint: fp, Paused: m.paused[entry.Workspace.ID]}
+		r := &Running{Entry: entry, Store: store, cancel: func() {}, done: make(chan struct{}), fingerprint: fp, Paused: m.paused[entry.Workspace.ID], Suspended: m.suspended[entry.Workspace.ID] > 0}
+		if r.Suspended {
+			r.SuspensionReason = "cleanup running"
+		}
 		r.Runtime = core.New(entry.Workspace, entry.Plugin, pluginapi.Env{Credentials: entry.Credentials, HTTP: m.HTTP}, store)
 		wid := entry.Workspace.ID
 		r.Runtime.OnArchive = func(k pluginapi.Key) {
@@ -195,7 +214,7 @@ func (m *Manager) reload() error {
 		ctx, cancel := context.WithCancel(m.ctx)
 		r.cancel = cancel
 		startContexts[r] = ctx
-		if r.Paused {
+		if r.Paused || r.Suspended {
 			close(r.done)
 		}
 	}
@@ -222,7 +241,7 @@ func (m *Manager) reload() error {
 		}
 	}
 	for _, r := range opened {
-		if !r.Paused {
+		if !r.Paused && !r.Suspended {
 			go func() { defer close(r.done); r.Runtime.Run(startContexts[r]) }()
 		}
 	}
@@ -277,6 +296,45 @@ func (m *Manager) SetAllPaused(paused bool, persist func(ids []string) error) er
 	return nil
 }
 
+// SuspendCapture drains this workspace's capture runtime before source deletion.
+// Leases nest independently of the user's pause choice. No manager or archive
+// lock is held while the caller performs network work.
+func (m *Manager) SuspendCapture(id string) (func(), error) {
+	m.reloadMu.Lock()
+	m.suspended[id]++
+	m.mu.Lock()
+	active := m.running[id] != nil
+	m.mu.Unlock()
+	var err error
+	if active {
+		err = m.reload()
+	}
+	if err != nil {
+		m.suspended[id]--
+		m.reloadMu.Unlock()
+		return nil, err
+	}
+	m.reloadMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.reloadMu.Lock()
+			defer m.reloadMu.Unlock()
+			m.suspended[id]--
+			m.mu.Lock()
+			active := m.running[id] != nil && !m.closed
+			m.mu.Unlock()
+			if !active {
+				return
+			}
+			if err := m.reload(); err != nil {
+				m.retry = true
+				slog.Warn("capture resume failed; configuration reload will retry", "workspace", id)
+			}
+		})
+	}, nil
+}
+
 func (m *Manager) SetPaused(id string, paused bool) {
 	m.reloadMu.Lock()
 	defer m.reloadMu.Unlock()
@@ -297,7 +355,18 @@ func (m *Manager) reloadIfChanged() {
 	m.reloadMu.Lock()
 	defer m.reloadMu.Unlock()
 	if m.retry {
-		_ = m.reload()
+		if time.Now().Before(m.retryAt) {
+			return
+		}
+		delay := m.retryDelay
+		if err := m.reload(); err != nil {
+			if delay == 0 {
+				delay = time.Second
+			}
+			m.retryDelay = min(delay*2, time.Minute)
+			m.retryAt = time.Now().Add(m.retryDelay)
+			slog.Warn("capture configuration retry failed", "retry_in", m.retryDelay)
+		}
 		return
 	}
 	next := m.fileStats()
@@ -339,4 +408,28 @@ func (m *Manager) IsPaused(id string) bool {
 	m.reloadMu.Lock()
 	defer m.reloadMu.Unlock()
 	return m.paused[id]
+}
+
+// IsSuspended reports a temporary cleanup lease, independently of user pause.
+func (m *Manager) IsSuspended(id string) bool {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+	return m.suspended[id] > 0
+}
+
+// CheckNow shares the reload boundary so checks cannot target a drained runtime.
+func (m *Manager) CheckNow(ctx context.Context, id string) core.CheckReport {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+	if m.suspended[id] > 0 {
+		message := "Capture is paused while cleanup runs"
+		return core.CheckReport{Workspace: id, Error: message, Hints: []string{message}}
+	}
+	m.mu.Lock()
+	r := m.running[id]
+	m.mu.Unlock()
+	if r == nil {
+		return core.CheckReport{Workspace: id, Error: "This workspace is not running. Check Settings for errors."}
+	}
+	return r.Runtime.CheckNow(ctx)
 }
