@@ -1,0 +1,248 @@
+name: Desktop
+# macOS menu-bar app: build + test on PRs touching it; on v* tags build the
+# DMG/zip, attach them to the GitHub Release created by release.yml, publish
+# the Sparkle appcast (when an EdDSA key is configured) and the Homebrew cask
+# (when HOMEBREW_TAP_TOKEN is configured).
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'internal/web/desktop*.go'
+      - 'cmd/chatkeeper/**'
+      - '.github/workflows/desktop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'internal/web/desktop*.go'
+      - 'cmd/chatkeeper/**'
+      - '.github/workflows/desktop.yml'
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+defaults:
+  run:
+    shell: bash
+jobs:
+  macos-app:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - name: Toolchain
+        run: |
+          sw_vers
+          swift --version
+          xcodebuild -version
+      - name: Unit tests (ChatKeeperKit)
+        working-directory: desktop/macos
+        run: swift test
+      - name: Go desktop endpoints
+        run: go test -count=1 -run 'Desktop|InstanceLock' ./internal/web ./cmd/chatkeeper
+      - name: Build ChatKeeper.app (universal, ad-hoc signed)
+        working-directory: desktop/macos
+        env:
+          VERSION: 0.0.0-ci.${{ github.run_number }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: scripts/build-app.sh
+      - name: Package DMG and zip
+        working-directory: desktop/macos
+        env:
+          VERSION: 0.0.0-ci.${{ github.run_number }}
+        run: scripts/package.sh
+      - name: Render cask and appcast templates
+        working-directory: desktop/macos
+        env:
+          VERSION: 0.0.0-ci.${{ github.run_number }}
+        run: |
+          python3 scripts/make-cask.py --version "$VERSION" --dmg "dist/ChatKeeper-$VERSION.dmg" --out dist/Casks/chatkeeper-app.rb --unsigned
+          ruby -c dist/Casks/chatkeeper-app.rb
+          python3 scripts/make-appcast.py --version "$VERSION" --build "${{ github.run_number }}" \
+            --signature 'sparkle:edSignature="Y2k=" length="1"' --out dist/appcast-sample.xml
+          plutil -lint dist/appcast-sample.xml
+      - name: Smoke test bundled server (desktop status endpoint)
+        working-directory: desktop/macos
+        run: |
+          home="$(mktemp -d)"
+          out="$(mktemp)"
+          CHATKEEPER_HOME="$home" dist/ChatKeeper.app/Contents/Resources/chatkeeper run --mode desktop --no-browser --bind 127.0.0.1:0 >"$out" 2>&1 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do grep -q 'Open ChatKeeper: ' "$out" && break; sleep 0.5; done
+          url="$(sed -n 's/^Open ChatKeeper: //p' "$out" | head -n1)"
+          [ -n "$url" ] || { cat "$out"; exit 1; }
+          base="${url%%/login*}"
+          token="${url##*token=}"
+          curl -fsS "$base/healthz"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "$base/api/desktop/status")"
+          [ "$code" = 401 ] || { echo "unauthenticated status returned $code"; exit 1; }
+          curl -fsS -H "Authorization: Bearer $token" "$base/api/desktop/status" | tee status.json
+          python3 -c 'import json; s=json.load(open("status.json")); assert s["state"] == "setup", s'
+      - name: Launch the menu-bar app and quit it cleanly
+        working-directory: desktop/macos
+        run: |
+          app="$PWD/dist/ChatKeeper.app"
+          support="$HOME/Library/Application Support/chatkeeper"
+          rm -f "$support/instance.url"
+          open -n "$app"
+          for _ in $(seq 1 60); do [ -s "$support/instance.url" ] && break; sleep 0.5; done
+          [ -s "$support/instance.url" ] || { echo "app did not start its server"; cat ~/Library/Logs/ChatKeeper/chatkeeper.log || true; exit 1; }
+          pgrep -f "ChatKeeper.app/Contents/Resources/chatkeeper" >/dev/null
+          url="$(cat "$support/instance.url")"
+          curl -fsS -H "Authorization: Bearer ${url##*token=}" "${url%%/login*}/api/desktop/status"
+          echo
+          if grep -q 'token=[^R]' ~/Library/Logs/ChatKeeper/chatkeeper.log; then echo "token leaked to log"; exit 1; fi
+          osascript -e 'tell application id "ai.bitsky.chatkeeper" to quit'
+          for _ in $(seq 1 30); do pgrep -f "ChatKeeper.app/Contents/" >/dev/null || break; sleep 0.5; done
+          if pgrep -fl "ChatKeeper.app/Contents/"; then echo "app or server still running after quit"; exit 1; fi
+          [ ! -e "$support/instance.url" ] || { echo "server did not shut down cleanly"; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ChatKeeper-macOS
+          path: |
+            desktop/macos/dist/ChatKeeper-*.dmg
+            desktop/macos/dist/ChatKeeper-*.zip
+            desktop/macos/dist/ChatKeeper-*.sha256
+            desktop/macos/dist/Casks/chatkeeper-app.rb
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    environment: release
+    runs-on: macos-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      # Signing switch: once a Developer ID certificate is stored, these turn
+      # ad-hoc signing into Developer ID signing + notarization.
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_CODESIGN_IDENTITY: ${{ vars.MACOS_CODESIGN_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+      SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.x'
+      - name: Select version and signing mode
+        run: |
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
+          if [ -n "$MACOS_CERTIFICATE_P12" ] && [ -n "$MACOS_CODESIGN_IDENTITY" ]; then
+            keychain="$RUNNER_TEMP/signing.keychain-db"
+            pass="$(uuidgen)"
+            security create-keychain -p "$pass" "$keychain"
+            security set-keychain-settings -lut 3600 "$keychain"
+            security unlock-keychain -p "$pass" "$keychain"
+            echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+            security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            rm -f "$RUNNER_TEMP/cert.p12"
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$pass" "$keychain" >/dev/null
+            security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+            echo "CODESIGN_IDENTITY=$MACOS_CODESIGN_IDENTITY" >> "$GITHUB_ENV"
+            if [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_APP_PASSWORD" ]; then
+              echo "NOTARIZE=1" >> "$GITHUB_ENV"
+            fi
+            echo "SIGNED=1" >> "$GITHUB_ENV"
+          else
+            echo "CODESIGN_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "SIGNED=0" >> "$GITHUB_ENV"
+          fi
+      - name: Test
+        working-directory: desktop/macos
+        run: swift test
+      - name: Build and package
+        working-directory: desktop/macos
+        run: |
+          scripts/build-app.sh
+          scripts/package.sh
+      - name: Sparkle appcast
+        if: ${{ env.SPARKLE_ED_PRIVATE_KEY != '' && env.SPARKLE_PUBLIC_ED_KEY != '' }}
+        working-directory: desktop/macos
+        run: |
+          sign_update="$(find .build/artifacts -type f -name sign_update -perm -u+x | head -n1)"
+          [ -n "$sign_update" ] || { echo "sign_update not found"; exit 1; }
+          keyfile="$RUNNER_TEMP/ed25519.key"
+          umask 077
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" > "$keyfile"
+          sig="$("$sign_update" --ed-key-file "$keyfile" "dist/ChatKeeper-$VERSION.zip")"
+          rm -f "$keyfile"
+          python3 scripts/make-appcast.py --version "$VERSION" --build "$BUILD_NUMBER" --signature "$sig" --out dist/appcast.xml
+      - name: Wait for the GitHub Release from release.yml
+        run: |
+          for _ in $(seq 1 120); do
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
+            sleep 15
+          done
+          echo "release $TAG not found after 30 minutes" >&2
+          exit 1
+      - name: Upload DMG, zip and appcast
+        working-directory: desktop/macos/dist
+        run: |
+          files=("ChatKeeper-$VERSION.dmg" "ChatKeeper-$VERSION.zip" "ChatKeeper-$VERSION.sha256")
+          [ -f appcast.xml ] && files+=(appcast.xml)
+          gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Add desktop install notes
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '## macOS desktop app' "$RUNNER_TEMP/notes.md"; then
+            {
+              echo
+              echo '## macOS desktop app'
+              echo
+              echo "Download \`ChatKeeper-$VERSION.dmg\` (Apple silicon and Intel, macOS 13+) or run"
+              echo '`brew install --cask bitskyai/tap/chatkeeper-app`.'
+              if [ "$SIGNED" != 1 ]; then
+                echo
+                echo 'This build is **not signed with an Apple Developer ID** (ad-hoc signed only). On first launch:'
+                echo
+                echo '1. Drag ChatKeeper to Applications.'
+                echo '2. Right-click (Control-click) ChatKeeper in Applications → **Open** → **Open**.'
+                echo '   On macOS 15+, use System Settings → Privacy & Security → **Open Anyway**.'
+                echo '3. Or in Terminal: `xattr -dr com.apple.quarantine /Applications/ChatKeeper.app`'
+                echo
+                echo 'The Homebrew cask clears the quarantine attribute automatically.'
+              fi
+            } >> "$RUNNER_TEMP/notes.md"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+      - name: Publish Homebrew cask
+        if: ${{ env.HOMEBREW_TAP_TOKEN != '' }}
+        run: |
+          tap="$RUNNER_TEMP/homebrew-tap"
+          git clone --depth 1 "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/bitskyai/homebrew-tap.git" "$tap"
+          flags=()
+          [ "$SIGNED" = 1 ] || flags+=(--unsigned)
+          [ -n "$SPARKLE_PUBLIC_ED_KEY" ] && flags+=(--auto-updates)
+          python3 desktop/macos/scripts/make-cask.py --version "$VERSION" --dmg "desktop/macos/dist/ChatKeeper-$VERSION.dmg" \
+            --out "$tap/Casks/chatkeeper-app.rb" "${flags[@]}"
+          ruby -c "$tap/Casks/chatkeeper-app.rb"
+          cd "$tap"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Casks/chatkeeper-app.rb
+          if git diff --cached --quiet; then echo "cask unchanged"; exit 0; fi
+          git commit -m "chatkeeper-app $TAG"
+          git push origin HEAD

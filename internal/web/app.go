@@ -229,6 +229,10 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	if strings.HasPrefix(r.URL.Path, "/api/desktop/") {
+		a.desktopAPI(w, r)
+		return
+	}
 	if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" || r.URL.Path == "/search" {
 		a.readAPI(w, r)
 		return
