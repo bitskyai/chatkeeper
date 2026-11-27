@@ -11,15 +11,14 @@ import (
 	"strings"
 )
 
-const cleanupInstructions = `A bot token (xoxb-) can delete only that bot's own posts. To delete messages posted by people or other bots, use a Slack USER token (xoxp-) from a workspace admin/owner and enable “Delete messages posted by others”. Slack workspace permissions still apply.
-1. Open OAuth & Permissions using the link below.
-2. Under User Token Scopes add chat:write, users:read, channels:history and groups:history. The history scopes let cleanup compare the complete live thread before deleting; users:read verifies admin/owner identity.
-3. Reinstall the app to your workspace and authorize as the workspace admin/owner.
-4. Copy the User OAuth Token (xoxp-), paste it below, and click Test.
-For own bot posts, add chat:write to Bot Token Scopes and reinstall, then use the bot token. Credentials are saved in the credential store and never displayed.`
+const cleanupInstructions = `1. Open OAuth & Permissions using the setup link below.
+2. Add the permissions below, reinstall the app, and copy its token.
+3. Paste the token below and click Test, then save.
+
+Details: A bot token (xoxb-) deletes only its own posts. For other people's posts, use an admin/owner User OAuth Token (xoxp-) and enable “Delete messages posted by others”. Under User Token Scopes add chat:write, users:read, channels:history and groups:history. For own bot posts, add these under Bot Token Scopes. History scopes compare complete live threads; users:read verifies identity. Reinstall after changing scopes. Workspace permissions still apply. Credentials stay in the credential store and are never displayed.`
 
 func (Plugin) CleanupSetup(ctx context.Context, w pluginapi.Workspace, env pluginapi.Env) (pluginapi.CleanupSetup, error) {
-	out := pluginapi.CleanupSetup{Title: "Delete from Slack after archiving", WizardTitle: "Clean up Slack (optional)", Instructions: cleanupInstructions}
+	out := pluginapi.CleanupSetup{Title: "Delete from Slack after archiving", WizardTitle: "Clean up Slack (optional)", Instructions: strings.Split(cleanupInstructions, "\n\nDetails: ")[0], Details: strings.Split(cleanupInstructions, "\n\nDetails: ")[1]}
 	var raw map[string]any
 	_ = json.Unmarshal(w.Settings, &raw)
 	c := NewClient(env.Credentials["bot_token"], env.HTTP)

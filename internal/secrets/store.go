@@ -167,3 +167,67 @@ func (s *Store) saveBackends(m map[string]string) error {
 
 // WatchPath identifies the file-backed credential change boundary.
 func (s *Store) WatchPath() string { return filepath.Join(s.Home, "secrets.env") }
+
+// Delete removes a locally stored credential; environment credentials are untouched.
+func (s *Store) Delete(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !namePattern.MatchString(name) {
+		return errors.New("invalid credential")
+	}
+	backends, err := s.backends()
+	if err != nil {
+		return err
+	}
+	if backends[name] == "keychain" {
+		if err := keyring.Delete(s.service(), name); err != nil && err != keyring.ErrNotFound {
+			return err
+		}
+	}
+	m, err := s.read()
+	if err != nil {
+		return err
+	}
+	delete(m, name)
+	keys := []string{}
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k + "=" + m[k] + "\n")
+	}
+	if err := config.AtomicWrite(filepath.Join(s.Home, "secrets.env"), []byte(b.String()), 0600); err != nil {
+		return err
+	}
+	delete(backends, name)
+	return s.saveBackends(backends)
+}
+
+// Prune removes superseded local drafts, preserving current policy and form refs.
+func (s *Store) Prune(prefix string, keep ...string) error {
+	s.mu.Lock()
+	refs, err := s.backends()
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	for ref := range refs {
+		if !strings.HasPrefix(ref, prefix) {
+			continue
+		}
+		preserve := false
+		for _, k := range keep {
+			if ref == k {
+				preserve = true
+			}
+		}
+		if !preserve {
+			if err := s.Delete(ref); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

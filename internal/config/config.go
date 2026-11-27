@@ -305,7 +305,7 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 		ws.Storage = location
 		if v, has := raw["cleanup"]; has {
 			cleanup, ok := mapping(v)
-			if !ok || !keys(cleanup, "enabled", "token_env", "allow_others", "min_age_hours", "buffer_max_age_seconds", "own_only", "allow_zero_age", "approval", "scope", "every_hours") {
+			if !ok || !keys(cleanup, "enabled", "token_env", "allow_others", "min_age_hours", "buffer_max_age_seconds", "own_only", "allow_zero_age", "approval", "scope", "every_hours", "schedule_since") {
 				return nil, ErrConfig
 			}
 			if v, has := cleanup["approval"]; has {
@@ -322,6 +322,13 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 					return nil, ErrConfig
 				}
 				ws.Cleanup.Scope = text(v)
+			}
+			if v, has := cleanup["schedule_since"]; has {
+				var err error
+				ws.Cleanup.ScheduleSince, err = time.Parse(time.RFC3339Nano, text(v))
+				if err != nil {
+					return nil, ErrConfig
+				}
 			}
 			if v, has := cleanup["every_hours"]; has {
 				n, ok := seconds(v)

@@ -10,6 +10,8 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -18,16 +20,22 @@ import (
 var cleanupSettingsTemplate = template.Must(template.Must(adminPages.Clone()).ParseFS(templates, "templates/cleanup-settings.html"))
 
 type cleanupSettingsPage struct {
-	CSRF, Workspace, Error, Notice, OAuthURL, Instructions, Title, WizardTitle, Age, Every, Action, ImageOrigins, CredentialDraft string
-	Enabled, AllowOthers, Immediate, Automatic, Managed, Wizard, CredentialSet                                                    bool
-	Scope                                                                                                                         string
-	Reaction, Owners                                                                                                              field
+	CSRF, Workspace, Error, Notice, OAuthURL, Instructions, Details, Title, WizardTitle, Age, Every, Action, ImageOrigins, CredentialDraft string
+	Enabled, AllowOthers, Immediate, Automatic, Managed, Wizard, CredentialSet                                                             bool
+	Scope                                                                                                                                  string
+	Reaction, Owners                                                                                                                       field
 }
 
 func cleanupReference(id string) string {
 	return "CHATKEEPER_" + strings.ToUpper(hex.EncodeToString([]byte(id))) + "_CLEANUP_TOKEN"
 }
 func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf string, wizard bool) {
+	// Serialize config reads, credential rotation and pruning so another form
+	// cannot prune the credential a concurrent save has just published.
+	if r.Method == "POST" {
+		a.cleanupSettingsMu.Lock()
+		defer a.cleanupSettingsMu.Unlock()
+	}
 	wizard = wizard || r.FormValue("wizard") == "true"
 	if r.Method != "GET" && r.Method != "POST" {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -56,7 +64,7 @@ func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf strin
 	}
 	ws := entry.Workspace
 	// Safety controls must remain available during a source outage.
-	if r.Method == "POST" && (r.FormValue("action") == "disable" || r.FormValue("action") == "stop_schedule" || ws.Cleanup.Enabled && r.FormValue("enabled") != "true" && r.FormValue("action") != "test") {
+	if r.Method == "POST" && (r.FormValue("action") == "disable" || r.FormValue("action") == "stop_schedule") {
 		var raw map[string]any
 		_ = json.Unmarshal(ws.Settings, &raw)
 		policy, _ := raw["cleanup"].(map[string]any)
@@ -90,7 +98,7 @@ func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf strin
 		env.Credentials[f.Name] = v
 	}
 	setup, setupErr := provider.CleanupSetup(ctx, ws, env)
-	pg := cleanupSettingsPage{CSRF: csrf, Workspace: ws.ID, Title: setup.Title, WizardTitle: setup.WizardTitle, Instructions: setup.Instructions, OAuthURL: setup.OAuthURL, Enabled: ws.Cleanup.Enabled, AllowOthers: ws.Cleanup.AllowOthers, Age: strconv.FormatFloat(ws.Cleanup.MinAge.Hours(), 'f', -1, 64), Scope: ws.Cleanup.Scope, Every: strconv.FormatFloat(ws.Cleanup.Every.Hours(), 'f', -1, 64), Automatic: ws.Cleanup.Every > 0, Immediate: ws.Cleanup.MinAge == 0, Managed: !config.Writable(a.opts.Config), Wizard: wizard, Action: "/settings/cleanup"}
+	pg := cleanupSettingsPage{CSRF: csrf, Workspace: ws.ID, Title: setup.Title, WizardTitle: setup.WizardTitle, Instructions: setup.Instructions, Details: setup.Details, OAuthURL: setup.OAuthURL, Enabled: ws.Cleanup.Enabled, AllowOthers: ws.Cleanup.AllowOthers, Age: strconv.FormatFloat(ws.Cleanup.MinAge.Hours(), 'f', -1, 64), Scope: ws.Cleanup.Scope, Every: strconv.FormatFloat(ws.Cleanup.Every.Hours(), 'f', -1, 64), Automatic: ws.Cleanup.Every > 0, Immediate: ws.Cleanup.MinAge == 0, Managed: !config.Writable(a.opts.Config), Wizard: wizard, Action: "/settings/cleanup"}
 	if pg.Scope == "" {
 		pg.Scope = "thread"
 	}
@@ -106,7 +114,7 @@ func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf strin
 		approval = pluginapi.Trigger{Who: "owner", Reactions: []string{"wastebasket"}}
 	}
 	pg.Reaction = field{Name: "reactions", Title: "Delete-approval reactions (separate from archive reactions)", Widget: "reaction-picker", Value: strings.Join(approval.Reactions, ","), Options: setup.Reactions}
-	pg.Owners = field{Name: "owners", Title: "Who may approve? Only listed owners — pick yourself to start", Multiple: true, Options: setup.Members, Selected: map[string]bool{}}
+	pg.Owners = field{Name: "owners", Title: "People whose reaction approves deletion", Multiple: true, Options: setup.Members, Selected: map[string]bool{}}
 	for _, id := range approval.Owners {
 		pg.Owners.Selected[id] = true
 	}
@@ -174,7 +182,7 @@ func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf strin
 		}
 		check := func() error {
 			if ageErr != nil || age < 0 || age > 1000000 || age != age || age == 0 && !pg.Immediate {
-				return errors.New("minimum age must be valid; 0 requires Allow immediate")
+				return errors.New("minimum age must be valid; 0 requires Delete right away")
 			}
 			if everyErr != nil || every < 0 || every > 1000000 || every != every || pg.Automatic && every < 1 {
 				return errors.New("automatic interval must be at least 1 hour")
@@ -204,10 +212,18 @@ func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf strin
 			if e = a.Secrets.Set(draftRef, token); e != nil {
 				pg.Error = "Cannot save credential in credential store"
 			} else {
+				if pg.CredentialDraft != "" && pg.CredentialDraft != ws.Cleanup.TokenEnv {
+					_ = a.Secrets.Delete(pg.CredentialDraft)
+				}
+				_ = a.Secrets.Prune(draftPrefix, ws.Cleanup.TokenEnv, draftRef)
 				pg.CredentialSet = true
 				pg.CredentialDraft = draftRef
 				pg.Notice = "Credential verified: workspace, identity, permissions and scopes. Save settings to persist changes."
 			}
+		} else if pg.Enabled && pg.Automatic && (r.FormValue("confirm") != ws.ID) {
+			pg.Error = "Type the workspace id to confirm automatic deletion"
+		} else if pg.Enabled && pg.Automatic && !a.schedulePasswordValid(r) {
+			pg.Error = "Administrator password required"
 		} else {
 			policy, _ := raw["cleanup"].(map[string]any)
 			if policy == nil {
@@ -220,6 +236,11 @@ func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf strin
 			policy["allow_zero_age"] = pg.Immediate
 			policy["scope"] = pg.Scope
 			policy["every_hours"] = every
+			if pg.Enabled && pg.Automatic {
+				policy["schedule_since"] = time.Now().UTC().Format(time.RFC3339Nano)
+			} else {
+				delete(policy, "schedule_since")
+			}
 			policy["approval"] = pluginapi.Trigger{Who: "owner", Owners: owners, Reactions: reactions, Match: "any"}
 
 			// New immutable reference: a failed credential write cannot change
@@ -239,12 +260,23 @@ func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf strin
 				}
 				return nil
 			})
+			published := e == nil
 			if e == nil {
 				e = a.Manager.Reload()
 			}
 			if e != nil {
+				if !published && ref != ws.Cleanup.TokenEnv && ref != pg.CredentialDraft {
+					_ = a.Secrets.Delete(ref)
+				}
 				pg.Error = "Could not save cleanup settings. Check credential-store access and configuration permissions."
 			} else {
+				_ = a.Secrets.Prune(draftPrefix, ref)
+				if ws.Cleanup.TokenEnv != ref && strings.HasPrefix(ws.Cleanup.TokenEnv, cleanupReference(ws.ID)) {
+					_ = a.Secrets.Delete(ws.Cleanup.TokenEnv)
+				}
+				if pg.CredentialDraft != "" && pg.CredentialDraft != ref {
+					_ = a.Secrets.Delete(pg.CredentialDraft)
+				}
 				suffix := ""
 				if wizard {
 					suffix = "&wizard=true"
@@ -264,4 +296,12 @@ func (a *App) cleanupSettings(w http.ResponseWriter, r *http.Request, csrf strin
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = cleanupSettingsTemplate.ExecuteTemplate(w, "cleanup-settings", pg)
+}
+
+func (a *App) schedulePasswordValid(r *http.Request) bool {
+	if a.opts.Mode != "server" {
+		return true
+	}
+	hash, err := os.ReadFile(filepath.Join(a.opts.Home, "state/admin.hash"))
+	return err == nil && passwordMatches(string(hash), r.FormValue("password"))
 }

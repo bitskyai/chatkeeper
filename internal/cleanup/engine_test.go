@@ -49,7 +49,7 @@ func fixture(t *testing.T) (pluginapi.Workspace, *storage.Folder) {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { s.Close() })
-	w := pluginapi.Workspace{ID: "fixture", Platform: "fixture", Storage: s.Path(), Channels: []string{"CFAKE"}, Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"save"}}, Cleanup: pluginapi.CleanupPolicy{Enabled: true, MinAge: 24 * time.Hour}}
+	w := pluginapi.Workspace{ID: "fixture", Platform: "fixture", Storage: s.Path(), Channels: []string{"CFAKE"}, Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"save"}}, Cleanup: pluginapi.CleanupPolicy{Approval: &pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"save"}}, Enabled: true, MinAge: 24 * time.Hour}}
 	v := pluginapi.Snapshot{Manifest: pluginapi.ArchiveManifest{Schema: 1, Platform: "fixture", TeamID: "TFAKE", Channel: "CFAKE", RootTS: "1000000000.000001", MessageCount: 3}, Messages: []pluginapi.Message{{"ts": "1000000000.000001", "user": "UOWN", "text": "root", "reply_count": 2, "reactions": []any{map[string]any{"name": "save", "users": []any{"UOWNER"}, "count": 1}}}, {"ts": "1000000001.000001", "thread_ts": "1000000000.000001", "user": "UOWN", "text": "reply"}, {"ts": "1000000002.000001", "thread_ts": "1000000000.000001", "user": "UOWN", "text": "last"}}, Users: map[string]pluginapi.Message{"UOWN": {"id": "UOWN"}}, Blobs: map[string]pluginapi.Blob{}}
 	_, e = s.Save(context.Background(), pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}, v)
 	if e != nil {
@@ -100,9 +100,9 @@ func TestOfflineGates(t *testing.T) {
 			case "disabled":
 				w.Cleanup.Enabled = false
 			case "trigger":
-				w.Trigger.Who = "any"
+				w.Cleanup.Approval.Who = "any"
 			case "owner-missing":
-				w.Trigger.Owners = []string{"UNOMATCH"}
+				w.Cleanup.Approval.Owners = []string{"UNOMATCH"}
 			case "platform":
 				w.Platform = "other"
 			case "channel":
@@ -720,5 +720,15 @@ func TestProgressPersistsEveryDeletion(t *testing.T) {
 	})
 	if r.Threads[0].Status != "deleted" || notifications != 3 {
 		t.Fatalf("missing action progress %d %+v", notifications, r)
+	}
+}
+
+func TestArchiveReactionCannotApproveDeletion(t *testing.T) {
+	w, s := fixture(t)
+	w.Cleanup.Approval = nil
+	d := &driver{}
+	Run(context.Background(), w, s, d, true)
+	if len(d.calls) != 0 {
+		t.Fatal("archive approval authorized deletion")
 	}
 }

@@ -1,6 +1,6 @@
 //go:build live && !noslack && !windows
 
-package web_test
+package web
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/bitskyai/chatkeeper/internal/plugins/slack"
 	"github.com/bitskyai/chatkeeper/internal/storage"
-	"github.com/bitskyai/chatkeeper/internal/web"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"github.com/chromedp/chromedp"
 	"github.com/zalando/go-keyring"
@@ -122,7 +121,7 @@ func TestRealCleanupSettingsUI(t *testing.T) {
 	cfg := fmt.Sprintf("workspaces:\n - id: live-cleanup\n   platform: slack\n   team_id: %s\n   bot_token_env: CHATKEEPER_LIVE_UI_BOT\n   channels: [%s]\n   poll_interval: 86400\n   storage: {type: folder, path: %q}\n   trigger: {who: any, reactions: [white_check_mark]}\n", team, channel, archive)
 	keyring.MockInit()
 	t.Setenv("CHATKEEPER_LIVE_UI_BOT", token)
-	a, e := web.NewApp(web.Options{Home: home, Mode: "desktop", Host: "127.0.0.1", LaunchToken: "synthetic-live-launch"})
+	a, e := NewApp(Options{Home: home, Mode: "desktop", Host: "127.0.0.1", LaunchToken: "synthetic-live-launch"})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -154,7 +153,33 @@ func TestRealCleanupSettingsUI(t *testing.T) {
 	if !strings.Contains(notice, "Credential verified") {
 		t.Fatal("credential test failed")
 	}
-	run(chromedp.Click(`button[value="save"]`), chromedp.WaitVisible(`//p[@role="status" and contains(., "Cleanup settings saved")]`, chromedp.BySearch), chromedp.Navigate(srv.URL+"/cleanup/?workspace=live-cleanup"), chromedp.Click(`form[action="/cleanup/preview"] button`), chromedp.WaitVisible(`form[action="/cleanup/apply"]`))
+	run(chromedp.Click(`button[value="save"]`), chromedp.WaitVisible(`//p[@role="status" and contains(., "Cleanup settings saved")]`, chromedp.BySearch))
+	// Old manual runs must not make a newly authorized schedule due immediately.
+	_, e = a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) VALUES('live-cleanup',?,'{}','complete')", time.Now().Add(-48*time.Hour).Unix())
+	if e != nil {
+		t.Fatal(e)
+	}
+	run(chromedp.Click(`input[name="automatic"]`), chromedp.SetValue(`input[name="every_hours"]`, "1"), chromedp.Click(`button[value="save"]`), chromedp.WaitVisible(`[role="alert"]`))
+	var confirmation string
+	run(chromedp.Text(`[role="alert"]`, &confirmation))
+	if !strings.Contains(confirmation, "Type the workspace id") {
+		t.Fatal("missing schedule confirmation gate")
+	}
+	run(chromedp.SetValue(`input[name="confirm"]`, "live-cleanup"), chromedp.Click(`button[value="save"]`), chromedp.WaitVisible(`//p[@role="status" and contains(., "Cleanup settings saved")]`, chromedp.BySearch))
+	// Keep capture runtime paused; enable only the synchronous scheduler probe.
+	a.Manager.SetPaused("live-cleanup", false)
+	a.runScheduledCleanup(ctx, time.Now().Add(59*time.Minute))
+	a.Manager.SetPaused("live-cleanup", true)
+	var runs int
+	if e = a.db.QueryRow("SELECT COUNT(*) FROM cleanup_runs").Scan(&runs); e != nil || runs != 1 {
+		t.Fatal("schedule fired before first interval", runs, e)
+	}
+	unchanged, err := store.Read(ctx, key)
+	if err != nil || len(unchanged.SourceDeletedAt) != 0 {
+		t.Fatal("early deletion")
+	}
+	run(chromedp.Click(`button[value="stop_schedule"]`), chromedp.WaitVisible(`//p[@role="status" and contains(., "Cleanup settings saved")]`, chromedp.BySearch))
+	run(chromedp.Navigate(srv.URL+"/cleanup/?workspace=live-cleanup"), chromedp.Click(`form[action="/cleanup/preview"] button`), chromedp.WaitVisible(`form[action="/cleanup/apply"]`))
 	var text string
 	run(chromedp.Text("main", &text))
 	if !strings.Contains(text, "dry-run") {
@@ -184,5 +209,5 @@ func TestRealCleanupSettingsUI(t *testing.T) {
 		}
 	}
 	// No real workspace IDs or token values are included in test receipts.
-	t.Log("LIVE PASS: UI tested/saved bot-only credential, wastebasket approval, explicit immediate deletion; preview/apply deleted 2 own tagged posts; archive retained 2 messages with deletion markers")
+	t.Log("LIVE PASS: schedule rejected missing confirmation, saved with typed id, no run at +59m despite old run; UI tested/saved bot-only credential, wastebasket approval, explicit immediate deletion; preview/apply deleted 2 own tagged posts; archive retained 2 messages with deletion markers")
 }

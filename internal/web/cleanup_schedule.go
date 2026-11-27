@@ -28,24 +28,32 @@ func (a *App) scheduleCleanup(ctx context.Context) {
 func (a *App) runScheduledCleanup(ctx context.Context, now time.Time) {
 	cfg, e := config.Load(a.opts.Config, false)
 	if e != nil {
+		report, _ := json.Marshal(cleanup.Report{Reason: "Automatic cleanup: cannot load configuration: " + e.Error()})
+		_, _ = a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) VALUES('',unixepoch(),?,'complete')", string(report))
 		return
 	}
 	for _, entry := range cfg.Workspaces {
 		ws := entry.Workspace
-		if !ws.Cleanup.Enabled || ws.Cleanup.Every <= 0 {
+		if a.Manager.IsPaused(ws.ID) || !ws.Cleanup.Enabled || ws.Cleanup.Every <= 0 {
 			continue
 		}
 		var last int64
 		if a.db.QueryRow("SELECT COALESCE(MAX(at),0) FROM cleanup_runs WHERE workspace=?", ws.ID).Scan(&last) != nil {
 			continue
 		}
-		// Enabling scheduling starts a full interval from the config's modification.
-		if last == 0 {
+		// The first run waits a full interval from enable/change, even after old runs.
+		if ws.Cleanup.ScheduleSince.IsZero() {
 			if info, e := configInfo(a.opts.Config); e == nil {
-				last = info
+				if info > last {
+					last = info
+				}
 			}
 		}
-		if now.Sub(time.Unix(last, 0)) < ws.Cleanup.Every {
+		origin := time.Unix(last, 0)
+		if ws.Cleanup.ScheduleSince.After(origin) {
+			origin = ws.Cleanup.ScheduleSince
+		}
+		if now.Sub(origin) < ws.Cleanup.Every {
 			continue
 		}
 		a.applyScheduled(ctx, entry)

@@ -42,25 +42,26 @@ type Options struct {
 	Dev                                                             bool
 }
 type App struct {
-	viewerCache      map[string]*Viewer
-	viewerGeneration int
-	opts             Options
-	db               *sql.DB
-	Manager          *app.Manager
-	Secrets          *secrets.Store
-	ctx              context.Context
-	cancel           context.CancelFunc
-	maintenanceDone  chan struct{}
-	cleanupJobs      sync.WaitGroup
-	mu, authMu       sync.Mutex
-	viewerMu         sync.Mutex
-	attempts         map[string]attempts
-	launchToken      string
-	existingConfig   bool
-	protocol         http.Handler
-	wizards          map[string]*wizard
-	reportMu         sync.Mutex
-	reports          map[string]*core.CheckReport
+	viewerCache       map[string]*Viewer
+	viewerGeneration  int
+	opts              Options
+	db                *sql.DB
+	Manager           *app.Manager
+	Secrets           *secrets.Store
+	ctx               context.Context
+	cancel            context.CancelFunc
+	maintenanceDone   chan struct{}
+	cleanupJobs       sync.WaitGroup
+	cleanupSettingsMu sync.Mutex
+	mu, authMu        sync.Mutex
+	viewerMu          sync.Mutex
+	attempts          map[string]attempts
+	launchToken       string
+	existingConfig    bool
+	protocol          http.Handler
+	wizards           map[string]*wizard
+	reportMu          sync.Mutex
+	reports           map[string]*core.CheckReport
 }
 type wizard struct {
 	mu          sync.Mutex

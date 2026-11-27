@@ -78,3 +78,25 @@ func TestFallbackRemainsAuthoritativeAfterKeychainRecovery(t *testing.T) {
 		t.Fatal("fallback resurrected old value", source, e)
 	}
 }
+
+func TestPruneSupersededDrafts(t *testing.T) {
+	s := Store{Home: t.TempDir()}
+	for _, ref := range []string{"TEST_DRAFT_OLD", "TEST_DRAFT_ACTIVE", "TEST_DRAFT_CURRENT", "OTHER"} {
+		if err := s.Set(ref, "synthetic"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Prune("TEST_DRAFT_", "TEST_DRAFT_ACTIVE", "TEST_DRAFT_CURRENT"); err != nil {
+		t.Fatal(err)
+	}
+	v, _, err := s.Get("TEST_DRAFT_OLD")
+	if err != nil || v != "" {
+		t.Fatal("superseded secret retained", err)
+	}
+	for _, ref := range []string{"TEST_DRAFT_ACTIVE", "TEST_DRAFT_CURRENT", "OTHER"} {
+		v, _, err := s.Get(ref)
+		if err != nil || v != "synthetic" {
+			t.Fatal("preserved ref lost", ref, err)
+		}
+	}
+}

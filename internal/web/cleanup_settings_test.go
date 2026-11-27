@@ -82,7 +82,7 @@ func TestCleanupSettingsSafetyAndRoundTrip(t *testing.T) {
 	}
 	v.Set("csrf", csrf)
 	w := send("POST", "/settings/cleanup", v)
-	if !strings.Contains(w.Body.String(), "0 requires Allow immediate") {
+	if !strings.Contains(w.Body.String(), "0 requires Delete right away") {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	v.Set("allow_zero_age", "true")
@@ -231,5 +231,102 @@ func TestCleanupCredentialDraftLongWorkspace(t *testing.T) {
 	w = send("POST", "/settings/cleanup", v)
 	if w.Code != 303 {
 		t.Fatal("Test→Save with blank token failed", w.Code, w.Body.String())
+	}
+}
+
+func TestScheduleRequiresTypedConfirmation(t *testing.T) {
+	_, path, _, send := cleanupSettingsFixture(t)
+	page := send("GET", "/settings/cleanup?workspace=fixture", nil)
+	csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page.Body.String())[1]
+	v := url.Values{"csrf": {csrf}, "workspace": {"fixture"}, "enabled": {"true"}, "automatic": {"true"}, "every_hours": {"1"}, "min_age_hours": {"24"}, "scope": {"thread"}, "owners": {"UOWNER"}, "reactions": {"wastebasket"}, "cleanup_token": {"xoxb-synthetic"}}
+	before, _ := os.ReadFile(path)
+	w := send("POST", "/settings/cleanup", v)
+	after, _ := os.ReadFile(path)
+	if w.Code == 303 || string(before) != string(after) {
+		t.Fatal("schedule bypassed confirmation")
+	}
+	v.Set("confirm", "fixture")
+	if w = send("POST", "/settings/cleanup", v); w.Code != 303 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	cfg, e := config.Load(path, false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if cfg.Workspaces[0].Workspace.Cleanup.Every != time.Hour {
+		t.Fatal("schedule not saved")
+	}
+	since := cfg.Workspaces[0].Workspace.Cleanup.ScheduleSince
+	v.Set("every_hours", "2")
+	v.Del("confirm")
+	if w = send("POST", "/settings/cleanup", v); w.Code == 303 {
+		t.Fatal("changed schedule skipped confirmation")
+	}
+	v.Set("confirm", "fixture")
+	if w = send("POST", "/settings/cleanup", v); w.Code != 303 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	cfg, e = config.Load(path, false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if cfg.Workspaces[0].Workspace.Cleanup.Every != 2*time.Hour || !cfg.Workspaces[0].Workspace.Cleanup.ScheduleSince.After(since) {
+		t.Fatal("changed schedule did not reset first interval")
+	}
+}
+
+func TestUncheckedEnableSavesOtherEditsAndReplacesDraft(t *testing.T) {
+	a, path, _, send := cleanupSettingsFixture(t)
+	page := send("GET", "/settings/cleanup?workspace=fixture", nil)
+	csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page.Body.String())[1]
+	v := url.Values{"csrf": {csrf}, "workspace": {"fixture"}, "enabled": {"true"}, "every_hours": {"24"}, "min_age_hours": {"24"}, "scope": {"thread"}, "owners": {"UOWNER"}, "reactions": {"wastebasket"}, "cleanup_token": {"xoxb-synthetic"}, "action": {"test"}}
+	w := send("POST", "/settings/cleanup", v)
+	draft := regexp.MustCompile(`name="credential_draft" value="([^"]+)"`).FindStringSubmatch(w.Body.String())[1]
+	v.Set("credential_draft", draft)
+	w = send("POST", "/settings/cleanup", v)
+	next := regexp.MustCompile(`name="credential_draft" value="([^"]+)"`).FindStringSubmatch(w.Body.String())[1]
+	if secret, _, err := a.Secrets.Get(draft); err != nil || secret != "" {
+		t.Fatal("old draft retained", err)
+	}
+	v.Set("credential_draft", next)
+	v.Set("cleanup_token", "")
+	v.Set("action", "save")
+	if w = send("POST", "/settings/cleanup", v); w.Code != 303 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	v.Del("enabled")
+	v.Set("scope", "messages")
+	v.Set("min_age_hours", "48")
+	if w = send("POST", "/settings/cleanup", v); w.Code != 303 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	cfg, err := config.Load(path, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := cfg.Workspaces[0].Workspace
+	if ws.Cleanup.Enabled || ws.Cleanup.Scope != "messages" || ws.Cleanup.MinAge != 48*time.Hour {
+		t.Fatal("unchecked save discarded edits", ws.Cleanup)
+	}
+}
+
+func TestFailedConfigPublishRemovesCredential(t *testing.T) {
+	_, path, _, send := cleanupSettingsFixture(t)
+	page := send("GET", "/settings/cleanup?workspace=fixture", nil)
+	csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(page.Body.String())[1]
+	if err := os.Mkdir(path+".bak", 0700); err != nil {
+		t.Fatal(err)
+	}
+	v := url.Values{"csrf": {csrf}, "workspace": {"fixture"}, "enabled": {"true"}, "every_hours": {"24"}, "min_age_hours": {"24"}, "scope": {"thread"}, "owners": {"UOWNER"}, "reactions": {"wastebasket"}, "cleanup_token": {"xoxb-synthetic"}, "action": {"save"}}
+	w := send("POST", "/settings/cleanup", v)
+	if w.Code == 303 {
+		t.Fatal("expected config publication failure")
+	}
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(path), "secrets.backends.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "_DRAFT_") {
+		t.Fatal("failed publication orphaned credential")
 	}
 }

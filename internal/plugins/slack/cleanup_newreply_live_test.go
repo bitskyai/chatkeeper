@@ -108,7 +108,7 @@ func TestRealCleanupNewReplyGate(t *testing.T) {
 	post(3)
 	api("reactions.add", url.Values{"channel": {channel}, "timestamp": {root}, "name": {"white_check_mark"}})
 	settings, _ := json.Marshal(map[string]any{"team_id": team})
-	ws := pluginapi.Workspace{ID: "gate", Platform: "slack", Settings: settings, Storage: t.TempDir(), Channels: []string{channel}, Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{user}, Reactions: []string{"white_check_mark"}}, Cleanup: pluginapi.CleanupPolicy{Enabled: true}}
+	ws := pluginapi.Workspace{ID: "gate", Platform: "slack", Settings: settings, Storage: t.TempDir(), Channels: []string{channel}, Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{user}, Reactions: []string{"white_check_mark"}}, Cleanup: pluginapi.CleanupPolicy{Approval: &pluginapi.Trigger{Who: "owner", Owners: []string{user}, Reactions: []string{"white_check_mark"}}, Enabled: true}}
 	p := slack.Plugin{}
 	env := pluginapi.Env{HTTP: client, Credentials: pluginapi.Credentials{"bot_token": token, "cleanup_token": token}}
 	session, e := p.NewSession(ctx, ws, env)
