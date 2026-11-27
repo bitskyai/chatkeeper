@@ -377,6 +377,42 @@ func (r *Runtime) backfill(ctx context.Context, s pluginapi.Session, trace *Chec
 				}
 			}
 		}
+
+		// A full pass repairs events missed while live capture was disconnected,
+		// including reply reactions. Re-read each candidate before authorizing save.
+		if full && caps.Realtime {
+			if inspector, ok := s.(pluginapi.ReplyInspector); ok {
+				for _, root := range roots {
+					if root.Channel != channel || root.Replies <= 0 {
+						continue
+					}
+					replies, err := Call(ctx, r.HookTimeout, func(c context.Context) ([]pluginapi.ReplyReaction, error) {
+						return inspector.ReplyReactions(c, []pluginapi.RootRef{root}, r.Workspace.Trigger.Reactions)
+					})
+					if fatal(err) {
+						return changed, err
+					}
+					if err != nil {
+						lastErr = err
+					}
+					for _, reply := range replies {
+						if reply.Channel != channel {
+							continue
+						}
+						k := pluginapi.Key{Channel: channel, RootTS: reply.RootTS}
+						ok, err := r.refresh(ctx, s, k, reply.TS)
+						if fatal(err) {
+							return changed, err
+						}
+						if err != nil {
+							lastErr = err
+						} else if ok {
+							changed++
+						}
+					}
+				}
+			}
+		}
 		if trace != nil {
 			r.inspectReplies(ctx, s, roots, trace)
 		}

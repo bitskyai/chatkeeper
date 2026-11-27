@@ -22,7 +22,7 @@ import (
 )
 
 func TestCleanupScheduleGatesAndPersistentActions(t *testing.T) {
-	for _, mode := range []string{"default-off", "disabled", "interval", "credential", "apply", "new-schedule", "paused"} {
+	for _, mode := range []string{"default-off", "disabled", "interval", "credential", "apply", "new-schedule", "paused", "suspended", "manual-starting"} {
 		t.Run(mode, func(t *testing.T) {
 			home := t.TempDir()
 			var a *App
@@ -35,7 +35,7 @@ func TestCleanupScheduleGatesAndPersistentActions(t *testing.T) {
 				json.NewEncoder(w).Encode(map[string]any{"ok": true, "messages": []any{msg}})
 			}
 			fake.Overrides["chat.delete"] = func(w http.ResponseWriter, r *http.Request) {
-				if !a.Manager.IsPaused("fixture") {
+				if !a.Manager.IsSuspended("fixture") {
 					t.Error("automatic deletion ran alongside capture")
 				}
 				fmt.Fprint(w, `{"ok":true,"channel":"CFIXTURE","ts":"100.000001"}`)
@@ -88,6 +88,41 @@ func TestCleanupScheduleGatesAndPersistentActions(t *testing.T) {
 			if mode == "paused" {
 				a.Manager.SetPaused("fixture", true)
 
+			}
+			if mode == "suspended" || mode == "manual-starting" {
+				var resume func()
+				if mode == "suspended" {
+					resume, e = a.Manager.SuspendCapture("fixture")
+					if e != nil {
+						t.Fatal(e)
+					}
+				} else {
+					_, e = a.db.Exec("INSERT INTO cleanup_runs(workspace,at,report,status) VALUES('fixture',?,'{}','running')", old.Unix())
+					if e != nil {
+						t.Fatal(e)
+					}
+				}
+				a.runScheduledCleanup(context.Background(), now)
+				var count int
+				a.db.QueryRow("SELECT COUNT(*) FROM cleanup_runs").Scan(&count)
+				want := 0
+				if mode == "manual-starting" {
+					want = 1
+				}
+				if count != want {
+					t.Fatal("skipped schedule advanced last run", count)
+				}
+				if resume != nil {
+					resume()
+				} else {
+					a.db.Exec("UPDATE cleanup_runs SET status='complete'")
+				}
+				a.runScheduledCleanup(context.Background(), now)
+				a.db.QueryRow("SELECT COUNT(*) FROM cleanup_runs").Scan(&count)
+				if count != want+1 {
+					t.Fatal("skipped run postponed next due run", count)
+				}
+				return
 			}
 			a.runScheduledCleanup(context.Background(), now)
 			var count int

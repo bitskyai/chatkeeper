@@ -61,7 +61,7 @@ func TestCleanupApplySurvivesRequestCancellation(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{"ok": true, "messages": msgs})
 	}
 	fake.Overrides["chat.delete"] = func(w http.ResponseWriter, r *http.Request) {
-		if !a.Manager.IsPaused("fixture") {
+		if !a.Manager.IsSuspended("fixture") {
 			t.Error("manual deletion ran alongside capture")
 		}
 		fmt.Fprint(w, `{"ok":true,"channel":"CFIXTURE","ts":"100.000001"}`)

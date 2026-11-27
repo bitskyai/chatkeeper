@@ -27,6 +27,8 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request, csrf string, set
 		state := health.State
 		if running.Paused {
 			state = "paused"
+		} else if running.Suspended {
+			state = "Paused for cleanup"
 		}
 		last := "Waiting for first archive"
 		if !health.LastCapture.IsZero() {
@@ -108,7 +110,7 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request, csrf string) {
 		for _, running := range a.Manager.List() {
 			if running.Entry.Workspace.ID == id {
 				ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
-				report := running.Runtime.CheckNow(ctx)
+				report := a.Manager.CheckNow(ctx, id)
 				cancel()
 				a.reportMu.Lock()
 				a.reports[id] = &report
