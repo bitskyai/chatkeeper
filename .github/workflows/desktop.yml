@@ -69,7 +69,7 @@ jobs:
           ruby -c dist/Casks/chatkeeper-app.rb
           python3 scripts/make-appcast.py --version "$VERSION" --build "${{ github.run_number }}" \
             --signature 'sparkle:edSignature="Y2k=" length="1"' --out dist/appcast-sample.xml
-          plutil -lint dist/appcast-sample.xml
+          xmllint --noout dist/appcast-sample.xml
       - name: Smoke test bundled server (desktop status endpoint)
         working-directory: desktop/macos
         run: |
