@@ -17,3 +17,9 @@ workspaces:
     storage:
       type: folder
       path: ../data/fixture
+    # Source deletion requires a separate opt-in, preview and live identity check.
+    cleanup:
+      enabled: false
+      token_env: CHATKEEPER_CLEANUP_TOKEN
+      min_age_hours: 24
+      allow_others: false

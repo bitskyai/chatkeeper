@@ -22,6 +22,7 @@ const maxFile int64 = 100 << 20
 const maxSnapshot int64 = 512 << 20
 
 var errAPI = errors.New("API read failed")
+var errRateLimited = errors.New("API read rate limit exhausted")
 
 type apiError struct{ code string }
 
@@ -80,7 +81,7 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 			res.Body.Close()
 			wait, e := strconv.Atoi(res.Header.Get("Retry-After"))
 			if e != nil || wait < 0 || wait > 300 {
-				return nil, errAPI
+				return nil, errRateLimited
 			}
 			retries++
 			select {
@@ -89,6 +90,10 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 			case <-time.After(time.Duration(wait) * time.Second):
 			}
 			continue
+		}
+		if res.StatusCode == 429 {
+			res.Body.Close()
+			return nil, errRateLimited
 		}
 		if file && res.StatusCode >= 300 && res.StatusCode < 400 {
 			res.Body.Close()

@@ -38,7 +38,7 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.26.x'
-      - run: go test -race -count=1 ./...
+      - run: go test -race -count=1 -p 1 ./...
       - run: go test -tags noslack ./...
       - run: go run -tags noslack ./cmd/chatkeeper version | tee /tmp/version.txt
       - run: |
@@ -87,7 +87,7 @@ jobs:
           curl -fsSLo /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
           sudo apt-get update
           sudo apt-get install -y /tmp/google-chrome.deb
-      - run: go test -race -count=1 ./internal/web -run TestBrowserWizard -v
+      - run: go test -race -count=1 ./internal/web -run TestBrowser -v
         env:
           CHATKEEPER_E2E: '1'
           TMPDIR: /tmp

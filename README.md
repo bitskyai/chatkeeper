@@ -213,3 +213,57 @@ create locks or recover an interrupted rename; use a copy for migration rehearsa
 Workspace removal keeps archives. See [CONTRIBUTING](CONTRIBUTING.md),
 [architecture](docs/design/architecture.md), [porting details](docs/porting.md),
 [launch checklist](docs/launch-checklist.md) and [MIT license](LICENSE).
+
+### Opt-in source cleanup
+
+Cleanup is off by default. It deletes source messages only after verifying the
+exact durable archive, a live identity, owner approval reaction and unchanged
+live content. Slack bot credentials can delete only their own messages. Deleting
+others requires a user admin/owner credential and explicit `allow_others: true`.
+
+Configure a workspace with `trigger.who: owner`, a nonempty `trigger.owners`
+list and its approval reactions, then add:
+
+```yaml
+cleanup:
+  enabled: true
+  token_env: CHATKEEPER_CLEANUP_TOKEN
+  min_age_hours: 24
+  # Zero requires an explicit allow_zero_age: true opt-in.
+  allow_others: false
+```
+
+Set the referenced secret in the environment or credential store. Preview is
+offline and needs no credential:
+
+```sh
+chatkeeper cleanup --workspace example
+chatkeeper cleanup --workspace example --apply
+```
+
+The authenticated **Cleanup** page offers per-workspace enable, preview and
+apply. Apply requires typing the workspace id, a fresh unchanged preview, and
+administrator password re-entry in server mode. Each thread reports dry-run,
+deferred, cleaned, deleted, unknown/pending, refused, rate-limited or blocked.
+Rate-limit exhaustion skips remaining threads. Web apply runs independently of
+the browser request, with a progress page that refreshes during the run.
+Unknown/pending previews cannot authorize web apply; refresh the archive or
+explicitly resume from the CLI for live reconciliation. Pending outcomes are
+never assumed successful.
+
+Keep the `cleanup/` journals with your archive. Deletion timestamps are stored
+there as `source_deleted_at` metadata so original snapshot bytes and hashes stay
+unchanged until refresh folds confirmed markers into the next snapshot.
+Refresh/backfill never shrink an archive and archive new replies after cleanup.
+The viewer and dashboard show cleaned, partial, stale or unknown/pending status.
+A stale journal is reconciled against the folded markers on the next cleanup.
+Folder storage on systems with durable directory sync is
+supported; Windows apply and unsupported storage types fail closed.
+
+The Helm cleanup CronJob has separate `cleanup.enabled`, `cleanup.workspace`
+and `cleanup.apply` opt-ins; its default execution is a dry-run.
+**Warning:** `cleanup.apply: true` schedules destructive source deletion without
+the web confirmation step. Enable it only after reviewing a dry-run and the
+workspace age, owner and credential policies. The real Slack gates verify
+deletion, viewer markers, tamper refusal, refresh/backfill retention and new
+reply capture after partial cleanup.

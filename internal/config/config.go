@@ -230,7 +230,7 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 		if !keys(raw, allowed...) {
 			return nil, ErrConfig
 		}
-		ws := pluginapi.Workspace{ID: wid, Platform: platform, PollInterval: 120 * time.Second, AutoChannels: true, Trigger: pluginapi.Trigger{Reactions: append([]string{}, manifest.DefaultReactions...), Who: "any"}}
+		ws := pluginapi.Workspace{ID: wid, Platform: platform, PollInterval: 120 * time.Second, Cleanup: pluginapi.CleanupPolicy{MinAge: 24 * time.Hour, TokenEnv: "CHATKEEPER_CLEANUP_TOKEN"}, AutoChannels: true, Trigger: pluginapi.Trigger{Reactions: append([]string{}, manifest.DefaultReactions...), Who: "any"}}
 		if v, has := raw["channels"]; has && v != "auto" {
 			chs, ok := stringList(v)
 			if !ok || len(chs) == 0 {
@@ -299,30 +299,48 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 		ws.Storage = location
 		if v, has := raw["cleanup"]; has {
 			cleanup, ok := mapping(v)
-			if !ok || !keys(cleanup, "enabled", "token_env", "allow_others", "min_age_hours", "buffer_max_age_seconds", "own_only") {
+			if !ok || !keys(cleanup, "enabled", "token_env", "allow_others", "min_age_hours", "buffer_max_age_seconds", "own_only", "allow_zero_age") {
 				return nil, ErrConfig
 			}
-			for _, k := range []string{"enabled", "allow_others", "own_only"} {
+			for _, k := range []string{"enabled", "allow_others", "own_only", "allow_zero_age"} {
 				if v, has := cleanup[k]; has {
 					b, ok := v.(bool)
-					if !ok || b {
+					if !ok {
 						return nil, ErrConfig
+					}
+					switch k {
+					case "enabled":
+						ws.Cleanup.Enabled = b
+					case "allow_others":
+						ws.Cleanup.AllowOthers = b
+					case "own_only":
+						ws.Cleanup.OwnOnly = b
 					}
 				}
 			}
 			for _, k := range []string{"min_age_hours", "buffer_max_age_seconds"} {
 				if v, has := cleanup[k]; has {
 					n, ok := seconds(v)
-					if !ok || n < 0 || k == "buffer_max_age_seconds" && n == 0 {
+					if !ok || n < 0 || n > 1000000 || n == 0 && (k == "buffer_max_age_seconds" || cleanup["allow_zero_age"] != true) {
 						return nil, ErrConfig
+					}
+					if k == "min_age_hours" {
+						ws.Cleanup.MinAge = time.Duration(n * float64(time.Hour))
+						if ws.Cleanup.MinAge == 0 && cleanup["allow_zero_age"] != true {
+							return nil, ErrConfig
+						}
 					}
 				}
 			}
-			if v, has := cleanup["token_env"]; has && !envID.MatchString(text(v)) {
-				return nil, ErrConfig
+			if v, has := cleanup["token_env"]; has {
+				if !envID.MatchString(text(v)) {
+					return nil, ErrConfig
+				}
+				ws.Cleanup.TokenEnv = text(v)
 			}
 		}
 		creds := pluginapi.Credentials{}
+
 		for k, property := range cs.Properties {
 			env := text(property["x-env-default"])
 			if v, has := raw[k+"_env"]; has {

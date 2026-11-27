@@ -42,7 +42,15 @@ type Trigger struct {
 	Who       string   `json:"who" yaml:"who"`
 	Owners    []string `json:"owners" yaml:"owners"`
 }
+type CleanupPolicy struct {
+	Enabled     bool
+	AllowOthers bool
+	OwnOnly     bool
+	MinAge      time.Duration
+	TokenEnv    string
+}
 type Workspace struct {
+	Cleanup               CleanupPolicy
 	ID, Platform, Storage string
 	Channels              []string
 	AutoChannels          bool
@@ -100,6 +108,8 @@ type Attachment struct {
 	URL    string `json:"url"`
 }
 type ArchiveManifest struct {
+	// CleanupProof links this generation to the journal whose receipts it folded.
+	CleanupProof string            `json:"cleanup_proof,omitempty"`
 	Schema       int               `json:"schema"`
 	Platform     string            `json:"platform,omitempty"`
 	TeamID       string            `json:"team_id"`
@@ -111,9 +121,13 @@ type ArchiveManifest struct {
 	Files        []Attachment      `json:"files"`
 }
 type Snapshot struct {
-	Manifest ArchiveManifest
-	Messages []Message
-	Users    map[string]Message
+	// CleanupStatus summarizes the journal state for archive readers.
+	CleanupStatus string `json:"cleanup_status,omitempty"`
+	// SourceDeletedAt projects verified journal and persisted deletion markers.
+	SourceDeletedAt map[string]string `json:"source_deleted_at,omitempty"`
+	Manifest        ArchiveManifest
+	Messages        []Message
+	Users           map[string]Message
 	// RawUsers retains optional malformed non-author metadata without rendering it.
 	RawUsers  map[string]any
 	Blobs     map[string]Blob
@@ -294,4 +308,19 @@ func schema(n map[string]any, item bool) error {
 		return schema(m, true)
 	}
 	return nil
+}
+
+// CleanupOffline checks platform policy without credentials or network access.
+type CleanupOffline interface {
+	CleanupReason(Workspace, Message) string
+}
+
+// CleanupStatus classifies safe mutation failures without leaking transport details.
+type CleanupError struct{ Status, Reason string }
+
+func (e *CleanupError) Error() string { return e.Reason }
+
+// CleanupBoundary validates source-specific workspace identity offline.
+type CleanupBoundary interface {
+	CleanupBoundary(Workspace, ArchiveManifest) string
 }
