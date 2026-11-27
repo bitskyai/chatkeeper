@@ -145,16 +145,21 @@ func execute(args []string, out io.Writer) error {
 				return web.ValidateWorkspace(ctx, *name, store, workspace, setupHTTP)
 			},
 		}
-		// Before setup there is nothing to search: serve only the setup tools
-		// so an agent can still ask setup_status what to do next.
-		if _, e := os.Stat(*name); errors.Is(e, fs.ErrNotExist) {
+		// Before setup, or before the app has built the archive index, there
+		// is nothing to search: serve only the setup tools so an agent can
+		// still ask setup_status what to do next.
+		setupOnly := func(reason string) error {
+			fmt.Fprintln(os.Stderr, "chatkeeper mcp: setup-only mode ("+reason+"); archive tools are unavailable")
 			server := archiveMCP.NewSetupOnly()
 			archiveMCP.AddSetup(server, setupTools)
 			return server.Run(ctx, &sdk.StdioTransport{})
 		}
+		if _, e := os.Stat(*name); errors.Is(e, fs.ErrNotExist) {
+			return setupOnly("no configuration yet")
+		}
 		cfg, e := config.Load(*name, false)
 		if e != nil {
-			return e
+			return setupOnly("configuration is invalid")
 		}
 		service := search.NewReadOnly(home)
 		defer service.Close()
@@ -166,7 +171,9 @@ func execute(args []string, out io.Writer) error {
 			}
 			sources[entry.Workspace.ID] = source
 		}
-		if e := service.Configure(ctx, sources); e != nil {
+		if e := service.Configure(ctx, sources); errors.Is(e, search.ErrUnavailable) {
+			return setupOnly("archive index not built yet; start chatkeeper once")
+		} else if e != nil {
 			return e
 		}
 		server := archiveMCP.New(service)
