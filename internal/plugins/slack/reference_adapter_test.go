@@ -31,6 +31,14 @@ func payloadSnapshot(t *testing.T, docs map[string][]byte) *pluginapi.Snapshot {
 	}
 	return v
 }
+
+// gapped lists reference traces that used to fail the whole thread and now
+// archive it with the offending file recorded as a gap.
+var gapped = map[string]bool{
+	"test_corrupt_cached_attachment_never_reused (call)":         true,
+	"test_deleted_file_never_satisfied_from_cached_bytes (call)": true,
+}
+
 func TestReferenceAdapterCases(t *testing.T) {
 	b, e := os.ReadFile("testdata/adapter.json")
 	if e != nil {
@@ -83,7 +91,21 @@ func TestReferenceAdapterCases(t *testing.T) {
 				return response(200, string(b)), nil
 			})})
 			s := &Session{client: c, team: tc.Team}
-			got, e := s.Snapshot(context.Background(), tc.Channel, pluginapi.Root{TS: str(tc.Root["ts"]), Raw: tc.Root}, payloadSnapshot(t, tc.Previous))
+			prev := payloadSnapshot(t, tc.Previous)
+			got, e := s.Snapshot(context.Background(), tc.Channel, pluginapi.Root{TS: str(tc.Root["ts"]), Raw: tc.Root}, prev)
+			if tc.Invalid && gapped[tc.Name] {
+				// Formerly the whole thread failed; now the thread is kept and the
+				// unusable file is recorded as missing, never served from cache.
+				if e != nil || len(got.Manifest.Gaps) == 0 || got.Manifest.Gaps[0].Kind != "file" {
+					t.Fatalf("want archive with a file gap, got %v %#v", e, got.Manifest.Gaps)
+				}
+				for _, g := range got.Manifest.Gaps {
+					if _, kept := got.Blobs["files/"+g.ID+".bin"]; kept {
+						t.Fatal("missing file was stored")
+					}
+				}
+				return
+			}
 			if (e != nil) != tc.Invalid {
 				t.Fatalf("invalid=%v err=%v", tc.Invalid, e)
 			}

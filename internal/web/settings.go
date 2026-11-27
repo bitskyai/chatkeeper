@@ -32,7 +32,11 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request, csrf string, set
 		if !health.LastCapture.IsZero() {
 			last = health.LastCapture.UTC().Format(time.RFC3339)
 		}
-		wr := workspaceRow{ID: running.Entry.Workspace.ID, State: state, Error: health.ErrorClass, Transport: transport, LastCapture: last, Paused: running.Paused, Activity: running.Runtime.Activity()}
+		errText := health.ErrorClass
+		if health.ErrorClass != "" && health.LastError != "" {
+			errText += ": " + health.LastError
+		}
+		wr := workspaceRow{ID: running.Entry.Workspace.ID, State: state, Error: errText, Transport: transport, LastCapture: last, Paused: running.Paused, Activity: running.Runtime.Activity()}
 		if len(wr.Activity) > 10 {
 			wr.Activity = wr.Activity[:10]
 		}

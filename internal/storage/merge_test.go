@@ -185,3 +185,67 @@ func TestSavingArchivedDeletionIsNoop(t *testing.T) {
 		t.Fatal("archive round trip silently restored source", changed, e)
 	}
 }
+
+func TestMergeKeepsGapsUntilRecovered(t *testing.T) {
+	base := fixture(t)
+	reply := base.Messages[1]["ts"].(string)
+	fileGap := pluginapi.Gap{Kind: "file", ID: "FMISSING", Message: reply, Reason: "download failed"}
+	userGap := pluginapi.Gap{Kind: "user", ID: "UMISSING", Message: reply, Reason: "author details unavailable"}
+	anonGap := pluginapi.Gap{Kind: "file", Message: reply, Reason: "attachment without a valid file id"}
+	old := fixture(t)
+	old.Manifest.Gaps = []pluginapi.Gap{fileGap, userGap, anonGap}
+	has := func(gaps []pluginapi.Gap, g pluginapi.Gap) bool {
+		for _, x := range gaps {
+			if gapKey(x) == gapKey(g) {
+				return true
+			}
+		}
+		return false
+	}
+	// Deleting the reply, or editing its attachment away, is not a recovery.
+	deleted := fixture(t)
+	deleted.Messages = deleted.Messages[:1]
+	edited := fixture(t)
+	edited.Messages[1]["text"] = "Edited synthetic reply without the file"
+	for name, fresh := range map[string]pluginapi.Snapshot{"deleted": deleted, "edited": edited} {
+		fresh.Manifest.Gaps = nil
+		got, e := merge(old, fresh, "2026-11-27T00:00:00Z")
+		if e != nil {
+			t.Fatal(name, e)
+		}
+		if !has(got.Manifest.Gaps, fileGap) || !has(got.Manifest.Gaps, userGap) {
+			t.Fatal(name, "unresolved gap dropped", got.Manifest.Gaps)
+		}
+		if name == "deleted" && !has(got.Manifest.Gaps, anonGap) || name == "edited" && has(got.Manifest.Gaps, anonGap) {
+			t.Fatal(name, "anonymous gap", got.Manifest.Gaps)
+		}
+	}
+	// The same items fetched successfully resolve the earlier gaps.
+	recovered := fixture(t)
+	recovered.Manifest.Gaps = nil
+	recovered.Manifest.Files = append(recovered.Manifest.Files, pluginapi.Attachment{ID: "FMISSING", Path: "files/FMISSING.bin"})
+	recovered.Users = map[string]pluginapi.Message{"UMISSING": {"id": "UMISSING"}}
+	got, e := merge(old, recovered, "2026-11-27T00:00:00Z")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(got.Manifest.Gaps) != 0 {
+		t.Fatal("recovered gaps kept", got.Manifest.Gaps)
+	}
+	// A gap that recurs is reported once, with the fresh reason.
+	again := fixture(t)
+	again.Manifest.Gaps = []pluginapi.Gap{{Kind: "file", ID: "FMISSING", Message: reply, Reason: "download failed again"}}
+	got, _ = merge(old, again, "2026-11-27T00:00:00Z")
+	n := 0
+	for _, g := range got.Manifest.Gaps {
+		if g.ID == "FMISSING" {
+			n++
+			if g.Reason != "download failed again" {
+				t.Fatal(g)
+			}
+		}
+	}
+	if n != 1 {
+		t.Fatal(got.Manifest.Gaps)
+	}
+}

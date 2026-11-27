@@ -3,6 +3,7 @@ package slack
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"net/url"
 	"regexp"
@@ -82,16 +83,37 @@ func pathLast(p string) string { i := strings.LastIndex(p, "/"); return p[i+1:] 
 func label(s string) string {
 	return strings.Join(strings.Fields(strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)), " ")
 }
+
+// list returns a bounded container list. Unexpected shapes are ignored rather
+// than failing the whole thread; only an oversized file list is an error.
 func list(m map[string]any, k string) ([]any, error) {
 	v, ok := m[k]
 	if !ok {
 		return nil, nil
 	}
 	a, ok := v.([]any)
-	if !ok || len(a) > 100 {
-		return nil, pluginapi.ErrInvalid
+	if !ok {
+		return nil, nil
+	}
+	if len(a) > maxList {
+		if k == "files" {
+			return nil, invalid("a message lists %d files (limit %d)", len(a), maxList)
+		}
+		a = a[:maxList]
 	}
 	return a, nil
+}
+
+const maxList = 100
+
+// Content parsing bounds. They only guard against pathological payloads; real
+// messages with long rich text stay far below them.
+const maxContentNodes = 50000
+const maxContentDepth = 32
+
+// invalid wraps ErrInvalid with a short description of what was rejected.
+func invalid(format string, args ...any) error {
+	return fmt.Errorf("%w: "+format, append([]any{pluginapi.ErrInvalid}, args...)...)
 }
 
 // Content extracts bounded text and explicit files. Preview media is retained raw,
@@ -99,11 +121,14 @@ func list(m map[string]any, k string) ([]any, error) {
 func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 	files := []map[string]any{}
 	var texts []string
-	budget := 1000
+	budget := maxContentNodes
 	spend := func(depth int) error {
 		budget--
-		if budget < 0 || depth > 12 {
-			return pluginapi.ErrInvalid
+		if budget < 0 {
+			return invalid("message content has more than %d elements", maxContentNodes)
+		}
+		if depth > maxContentDepth {
+			return invalid("message content is nested deeper than %d levels", maxContentDepth)
 		}
 		return nil
 	}
@@ -113,14 +138,12 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 			return e
 		}
 		for _, v := range a {
-			m, ok := v.(map[string]any)
-			if !ok {
-				return pluginapi.ErrInvalid
+			if m, ok := v.(map[string]any); ok {
+				files = append(files, m)
 			}
-			files = append(files, m)
 		}
-		if len(files) > 100 {
-			return pluginapi.ErrInvalid
+		if len(files) > maxList {
+			return invalid("a message lists more than %d files", maxList)
 		}
 		return nil
 	}
@@ -166,76 +189,49 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 		}
 		n, ok := v.(map[string]any)
 		if !ok {
-			return pluginapi.ErrInvalid
+			// Scalars inside element lists carry no renderable structure.
+			return nil
 		}
-		kind := ""
-		if v, has := n["type"]; has {
-			var valid bool
-			kind, valid = v.(string)
-			if !valid {
-				return pluginapi.ErrInvalid
-			}
-		}
+		kind, _ := n["type"].(string)
 		switch kind {
 		case "file":
-			return pluginapi.ErrInvalid
-		case "canvas":
-			if len(n) != 2 || !id(n["file_id"], "file") {
-				return pluginapi.ErrInvalid
+			// A file block references a remote or shared file; it is shown by
+			// name only and never fetched from the block.
+			name := str(n["external_id"])
+			if name == "" {
+				name = str(n["file_id"])
 			}
-			texts = append(texts, "canvas "+str(n["file_id"]))
+			texts = append(texts, strings.TrimSpace("file "+label(name)))
+			return nil
+		case "canvas":
+			if id(n["file_id"], "file") {
+				texts = append(texts, "canvas "+str(n["file_id"]))
+			}
 			return nil
 		case "usergroup":
-			if !regexp.MustCompile(`^S[A-Z0-9]+$`).MatchString(str(n["usergroup_id"])) {
-				return pluginapi.ErrInvalid
+			if regexp.MustCompile(`^S[A-Z0-9]+$`).MatchString(str(n["usergroup_id"])) {
+				texts = append(texts, "@"+str(n["usergroup_id"]))
 			}
-			texts = append(texts, "@"+str(n["usergroup_id"]))
 			return nil
 		case "date":
-			stamp, ok := integer(n["timestamp"])
-			if !ok || stamp < 0 {
-				return pluginapi.ErrInvalid
-			}
-			fallback, has := n["fallback"]
-			if !has {
+			fallback, ok := n["fallback"].(string)
+			if !ok {
+				stamp, valid := integer(n["timestamp"])
+				if !valid || stamp < 0 {
+					return nil
+				}
 				fallback = "date " + strconv.FormatInt(stamp, 10)
 			}
-			s, ok := fallback.(string)
-			if !ok {
-				return pluginapi.ErrInvalid
-			}
-			texts = append(texts, label(s))
+			texts = append(texts, label(fallback))
 			return nil
 		case "message_mention":
-			allowed := map[string]bool{"type": true, "message_ts": true, "channel_id": true, "author_id": true, "thread_ts": true, "text": true, "url": true}
-			for k := range n {
-				if !allowed[k] {
-					return pluginapi.ErrInvalid
-				}
-			}
-			if !id(n["message_ts"], "ts") || !id(n["channel_id"], "channel") {
-				return pluginapi.ErrInvalid
-			}
-			for k, kind := range map[string]string{"author_id": "user", "thread_ts": "ts"} {
-				if v, ok := n[k]; ok && !id(v, kind) {
-					return pluginapi.ErrInvalid
-				}
-			}
-			text, link := "", ""
-			for k, target := range map[string]*string{"text": &text, "url": &link} {
-				if v, has := n[k]; has {
-					s, ok := v.(string)
-					if !ok {
-						return pluginapi.ErrInvalid
-					}
-					*target = s
-				}
-			}
+			text, _ := n["text"].(string)
+			link, _ := n["url"].(string)
 			text = label(text)
 			if text == "" {
 				text = "Slack message"
 			}
-			if Permalink(link, str(n["channel_id"]), false) == nil {
+			if id(n["message_ts"], "ts") && id(n["channel_id"], "channel") && Permalink(link, str(n["channel_id"]), false) == nil {
 				text = "<" + link + "|" + text + ">"
 			}
 			texts = append(texts, text)
@@ -252,16 +248,14 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 			}
 			s, ok := v.(string)
 			if !ok {
-				switch v.(type) {
-				case map[string]any:
+				if _, isMap := v.(map[string]any); isMap {
 					if e := visit(v, depth+1); e != nil {
 						return e
 					}
-					done[k] = true
-					continue
-				default:
-					return pluginapi.ErrInvalid
 				}
+				// Other shapes (null, numbers, lists) under a label key are ignored.
+				done[k] = true
+				continue
 			}
 			done[k] = true
 			if k == "user_id" && kind == "user" && id(s, "user") {
@@ -284,9 +278,8 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 				continue
 			}
 			if k == "style" {
-				if _, ok := v.(map[string]any); !ok {
-					return pluginapi.ErrInvalid
-				}
+				// Text styles are maps ({"bold":true}); list and button styles
+				// are strings ("bullet", "primary"). Neither carries content.
 				if e := cosmetic(v, depth+1); e != nil {
 					return e
 				}
@@ -294,12 +287,6 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 			}
 			switch v.(type) {
 			case map[string]any, []any:
-				if k == "accessory" {
-					m, ok := v.(map[string]any)
-					if !ok || str(m["type"]) == "" {
-						return pluginapi.ErrInvalid
-					}
-				}
 				if e := visit(v, depth+1); e != nil {
 					return e
 				}
@@ -313,9 +300,8 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 			return e
 		}
 		for _, v := range a {
-			m, ok := v.(map[string]any)
-			if !ok || str(m["type"]) == "" {
-				return pluginapi.ErrInvalid
+			if m, ok := v.(map[string]any); !ok || str(m["type"]) == "" {
+				continue
 			}
 			if e = visit(v, depth); e != nil {
 				return e
@@ -335,17 +321,11 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 			}
 			m, ok := v.(map[string]any)
 			if !ok {
-				return pluginapi.ErrInvalid
+				continue
 			}
 			for _, k := range []string{"pretext", "author_name", "title", "text", "fallback", "footer"} {
-				if v, ok := m[k]; ok {
-					s, valid := v.(string)
-					if !valid {
-						return pluginapi.ErrInvalid
-					}
-					if s != "" {
-						texts = append(texts, s)
-					}
+				if s, _ := m[k].(string); s != "" {
+					texts = append(texts, s)
 				}
 			}
 			fields, e := list(m, "fields")
@@ -358,17 +338,11 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 				}
 				fm, ok := f.(map[string]any)
 				if !ok {
-					return pluginapi.ErrInvalid
+					continue
 				}
 				for _, k := range []string{"title", "value"} {
-					if v, ok := fm[k]; ok {
-						s, ok := v.(string)
-						if !ok {
-							return pluginapi.ErrInvalid
-						}
-						if s != "" {
-							texts = append(texts, s)
-						}
+					if s, _ := fm[k].(string); s != "" {
+						texts = append(texts, s)
 					}
 				}
 			}
@@ -417,9 +391,16 @@ func Mentioned(m pluginapi.Message) []string {
 	sort.Strings(out)
 	return out
 }
+
+// Name picks a display name from a user record or, for messages posted by an
+// app or integration without a user, from the message's own bot fields.
 func Name(user pluginapi.Message) string {
 	p, _ := user["profile"].(map[string]any)
-	for _, v := range []any{p["display_name"], p["real_name"], user["real_name"], user["name"], user["id"]} {
+	if p == nil {
+		p, _ = user["user_profile"].(map[string]any)
+	}
+	bot, _ := user["bot_profile"].(map[string]any)
+	for _, v := range []any{p["display_name"], p["real_name"], user["real_name"], user["name"], user["username"], bot["name"], user["id"], user["bot_id"]} {
 		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
 			return s
 		}
@@ -461,8 +442,13 @@ func (Hooks) Validate(ctx context.Context, v pluginapi.Snapshot) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if !id(msg["ts"], "ts") || !id(msg["user"], "user") || seen[str(msg["ts"])] || i == 0 && msg["ts"] != m.RootTS {
-			return pluginapi.ErrInvalid
+		if !id(msg["ts"], "ts") || seen[str(msg["ts"])] || i == 0 && msg["ts"] != m.RootTS {
+			return invalid("message %d has a missing or duplicate timestamp", i)
+		}
+		// App and integration posts may have no user; when present it must resolve.
+		uid, hasUser := msg["user"]
+		if hasUser && !id(uid, "user") {
+			return invalid("message %s has a malformed author", str(msg["ts"]))
 		}
 		seen[str(msg["ts"])] = true
 		thread, has := msg["thread_ts"]
@@ -474,13 +460,15 @@ func (Hooks) Validate(ctx context.Context, v pluginapi.Snapshot) error {
 				return pluginapi.ErrInvalid
 			}
 		}
-		user := v.Users[str(msg["user"])]
-		if user == nil || user["id"] != msg["user"] {
-			return pluginapi.ErrInvalid
-		}
-		if profile, has := user["profile"]; has {
-			if _, ok := profile.(map[string]any); !ok {
-				return pluginapi.ErrInvalid
+		if hasUser {
+			user := v.Users[str(uid)]
+			if user == nil || user["id"] != uid {
+				return invalid("message %s author %s has no user record", str(msg["ts"]), str(uid))
+			}
+			if profile, has := user["profile"]; has {
+				if _, ok := profile.(map[string]any); !ok {
+					return invalid("user %s has a malformed profile", str(uid))
+				}
 			}
 		}
 		entries, _, e := Content(msg)
@@ -488,10 +476,25 @@ func (Hooks) Validate(ctx context.Context, v pluginapi.Snapshot) error {
 			return e
 		}
 		for _, f := range entries {
-			if !id(f["id"], "file") {
-				return pluginapi.ErrInvalid
+			if id(f["id"], "file") {
+				files[str(f["id"])] = true
 			}
-			files[str(f["id"])] = true
+		}
+	}
+	stored := map[string]bool{}
+	for _, f := range m.Files {
+		stored[f.ID] = true
+	}
+	missing := map[string]bool{}
+	for _, g := range m.Gaps {
+		if g.Kind == "file" {
+			missing[g.ID] = true
+		}
+	}
+	// Every referenced file is either stored or recorded as a gap.
+	for fid := range files {
+		if !stored[fid] && !missing[fid] {
+			return invalid("file %s is neither stored nor recorded as missing", fid)
 		}
 	}
 	count := int64(0)
@@ -502,8 +505,8 @@ func (Hooks) Validate(ctx context.Context, v pluginapi.Snapshot) error {
 			return pluginapi.ErrInvalid
 		}
 	}
-	if count < 0 || m.Schema == 1 && (count != int64(len(v.Messages)-1) || len(files) != len(m.Files)) || m.Schema == 2 && (count > int64(len(v.Messages)-1) || len(files) > len(m.Files)) || len(v.Blobs) != len(m.Files) {
-		return pluginapi.ErrInvalid
+	if count < 0 || m.Schema == 1 && count != int64(len(v.Messages)-1) || m.Schema == 2 && count > int64(len(v.Messages)-1) || len(v.Blobs) != len(m.Files) {
+		return invalid("reply count %d does not match %d stored messages", count, len(v.Messages))
 	}
 	seen = map[string]bool{}
 	for _, f := range m.Files {

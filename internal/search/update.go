@@ -173,8 +173,9 @@ func (w *workspace) insert(ctx context.Context, tx *sql.Tx, k pluginapi.Key, v *
 			}
 		}
 		texts = append(texts, text)
-		a, _ := m["user"].(string)
-		authors[a] = true
+		if a, _ := m["user"].(string); a != "" {
+			authors[a] = true
+		}
 		return nil
 	}
 	for _, m := range v.Messages {

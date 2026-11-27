@@ -63,6 +63,8 @@ type threadPage struct {
 	Title, Back, Permalink, CleanupStatus string
 	Messages                              []message
 	Files                                 []row
+	// Gaps lists referenced items the capture could not store.
+	Gaps []string
 }
 
 func (v *Viewer) ServeHTTP(w http.ResponseWriter, r *http.Request) { v.serveHTTP(w, r, v.sources) }
@@ -185,7 +187,12 @@ func (v *Viewer) serveHTTP(w http.ResponseWriter, r *http.Request, sources map[s
 			return
 		}
 		uid, _ := m["user"].(string)
-		author, e := core.Call(ctx, 10*time.Second, func(c context.Context) (string, error) { return source.Content.Author(c, users[uid]) })
+		authorRecord := users[uid]
+		if uid == "" {
+			// Posts without an author reference describe their own sender.
+			authorRecord = m
+		}
+		author, e := core.Call(ctx, 10*time.Second, func(c context.Context) (string, error) { return source.Content.Author(c, authorRecord) })
 		if e != nil {
 			http.Error(w, "archive content failure", http.StatusServiceUnavailable)
 			return
@@ -215,6 +222,16 @@ func (v *Viewer) serveHTTP(w http.ResponseWriter, r *http.Request, sources map[s
 	}
 	for _, f := range snapshot.Manifest.Files {
 		page.Files = append(page.Files, row{URL: r.URL.Path + "/" + f.Path, Label: f.Name})
+	}
+	for _, g := range snapshot.Manifest.Gaps {
+		item := g.Kind
+		if g.ID != "" {
+			item += " " + g.ID
+		}
+		if g.Message != "" {
+			item += " (message " + g.Message + ")"
+		}
+		page.Gaps = append(page.Gaps, item+": "+g.Reason)
 	}
 	v.render(w, "thread", page)
 }

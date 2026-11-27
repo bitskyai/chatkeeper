@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"io"
 	"net/http"
@@ -25,9 +26,43 @@ const maxSnapshot int64 = 512 << 20
 
 var errAPI = errors.New("API read failed")
 
-type apiError struct{ code string }
+// apiError is a Slack Web API error response. Needed and provided are the
+// scope lists Slack returns with missing_scope.
+type apiError struct{ code, method, needed, provided string }
 
-func (e apiError) Error() string { return "API read failed: " + e.code }
+func (e apiError) Error() string {
+	out := "Slack API "
+	if e.method != "" {
+		out += e.method + " "
+	}
+	out += "error: " + e.code
+	if e.code == "missing_scope" {
+		if e.needed != "" {
+			out += " (needed: " + e.needed
+			if e.provided != "" {
+				out += "; token has: " + e.provided
+			}
+			out += ")"
+		}
+		out += ". " + scopeHint(e.needed)
+	}
+	return out
+}
+
+// scopeHint is the one-line fix for a missing bot scope.
+func scopeHint(needed string) string {
+	if needed == "" {
+		needed = "the missing scope"
+	}
+	return "Fix: add " + needed + " under OAuth & Permissions > Bot Token Scopes, then reinstall the app to the workspace."
+}
+
+var safeScopes = regexp.MustCompile(`^[a-z0-9:._,-]{1,200}$`)
+
+// apiErr wraps a transport-level failure with a short, credential-free detail.
+func apiErr(format string, args ...any) error {
+	return fmt.Errorf("%w: "+format, append([]any{errAPI}, args...)...)
+}
 
 var readMethods = map[string]bool{"auth.test": true, "conversations.history": true, "conversations.replies": true, "reactions.get": true, "users.info": true, "users.list": true, "chat.getPermalink": true, "users.conversations": true, "conversations.list": true, "conversations.info": true, "emoji.list": true, "bots.info": true}
 
@@ -99,12 +134,19 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 		if e := c.waitCooldown(ctx); e != nil {
 			return nil, e
 		}
-		if file && (redirects == 0 && FileURL(rawURL) != nil || redirects > 0 && fileRedirectURL(rawURL) != nil) {
-			return nil, pluginapi.ErrInvalid
+		if file && redirects == 0 && FileURL(rawURL) != nil {
+			return nil, invalid("file URL is not on files.slack.com")
+		}
+		if file && redirects > 0 && fileRedirectURL(rawURL) != nil {
+			host := ""
+			if u, e := url.Parse(rawURL); e == nil {
+				host = u.Hostname()
+			}
+			return nil, invalid("file download redirected to %s (a sign-in page?); the bot token may lack files:read or the file is not shared with the bot", label(host))
 		}
 		req, e := http.NewRequestWithContext(ctx, method, rawURL, nil)
 		if e != nil {
-			return nil, errAPI
+			return nil, apiErr("bad request URL")
 		}
 		if file {
 			u, _ := url.Parse(rawURL)
@@ -125,7 +167,10 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 		}
 		res, e := transport.Do(req)
 		if e != nil {
-			return nil, errAPI
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, apiErr("request failed: %s", pluginapi.Redact(e.Error(), token))
 		}
 		if res.StatusCode == 429 {
 			res.Body.Close()
@@ -149,45 +194,76 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 			res.Body.Close()
 			redirects++
 			if redirects > 4 {
-				return nil, errAPI
+				return nil, apiErr("file download redirected too many times")
 			}
 			base, _ := url.Parse(rawURL)
 			loc, e := url.Parse(res.Header.Get("Location"))
 			if e != nil || res.Header.Get("Location") == "" {
-				return nil, errAPI
+				return nil, apiErr("file download redirect without a location")
 			}
 			rawURL = base.ResolveReference(loc).String()
 			continue
 		}
 		if res.StatusCode != 200 {
 			res.Body.Close()
-			return nil, errAPI
+			what := "API"
+			if file {
+				what = "file download"
+			}
+			if res.StatusCode >= 300 && res.StatusCode < 400 {
+				return nil, apiErr("%s returned an unexpected redirect (HTTP %d)", what, res.StatusCode)
+			}
+			return nil, apiErr("%s returned HTTP %d", what, res.StatusCode)
 		}
 		b, e := io.ReadAll(io.LimitReader(res.Body, limit+1))
 		res.Body.Close()
-		if e != nil || int64(len(b)) > limit || res.ContentLength >= 0 && res.ContentLength != int64(len(b)) {
-			return nil, errAPI
+		if e != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, apiErr("reading the response failed: %s", pluginapi.Redact(e.Error(), token))
+		}
+		if int64(len(b)) > limit {
+			return nil, apiErr("response larger than %d bytes", limit)
+		}
+		if res.ContentLength >= 0 && res.ContentLength != int64(len(b)) {
+			return nil, apiErr("response truncated (%d of %d bytes)", len(b), res.ContentLength)
+		}
+		if file && strings.HasPrefix(strings.ToLower(res.Header.Get("Content-Type")), "text/html") {
+			return b, errHTML
 		}
 		return b, nil
 	}
 }
+
+// errHTML marks a file download that returned a web page instead of the file;
+// Slack does this when the token cannot read the file.
+var errHTML = errors.New("file download returned an HTML page instead of the file; the bot token may lack files:read or the file is not shared with the bot")
+
 func parse(b []byte) (map[string]any, error) {
 	var v map[string]any
 	d := json.NewDecoder(bytes.NewReader(b))
 	d.UseNumber()
 	if d.Decode(&v) != nil || v == nil {
-		return nil, errAPI
+		return nil, apiErr("response is not a JSON object")
 	}
 	var extra any
 	if d.Decode(&extra) != io.EOF {
-		return nil, errAPI
+		return nil, apiErr("response has trailing data")
 	}
 	if v["ok"] != true {
 		code := str(v["error"])
 		if !safeCode.MatchString(code) {
 			code = "unknown_error"
 		}
-		return nil, apiError{code}
+		e := apiError{code: code}
+		if needed := str(v["needed"]); safeScopes.MatchString(needed) {
+			e.needed = needed
+		}
+		if provided := str(v["provided"]); safeScopes.MatchString(provided) {
+			e.provided = provided
+		}
+		return nil, e
 	}
 	return v, nil
 }
@@ -200,9 +276,21 @@ func (c *Client) Call(ctx context.Context, method string, params url.Values) (ma
 	}
 	b, e := c.get(ctx, "GET", "https://slack.com/api/"+method+"?"+params.Encode(), c.token, maxJSON, false)
 	if e != nil {
+		if errors.Is(e, errAPI) {
+			return nil, fmt.Errorf("%s: %w", method, e)
+		}
 		return nil, e
 	}
-	return parse(b)
+	doc, e := parse(b)
+	var api apiError
+	if errors.As(e, &api) {
+		api.method = method
+		return nil, api
+	}
+	if e != nil {
+		return nil, fmt.Errorf("%s: %w", method, e)
+	}
+	return doc, nil
 }
 func (c *Client) Download(ctx context.Context, rawURL string) ([]byte, error) {
 	return c.get(ctx, "GET", rawURL, c.token, maxFile, true)
@@ -497,19 +585,19 @@ func (s *Session) pages(ctx context.Context, method string, p url.Values) ([]plu
 		}
 		entries, ok := doc["messages"].([]any)
 		if !ok {
-			return nil, pluginapi.ErrInvalid
+			return nil, invalid("%s returned no message list", method)
 		}
 		for i, v := range entries {
 			m, ok := v.(map[string]any)
 			if !ok || !id(m["ts"], "ts") {
-				return nil, pluginapi.ErrInvalid
+				return nil, invalid("%s returned a message without a valid timestamp", method)
 			}
 			ts := str(m["ts"])
 			if seen[ts] {
 				if method == "conversations.replies" && i == 0 && ts == params.Get("ts") {
 					continue
 				}
-				return nil, pluginapi.ErrInvalid
+				return nil, invalid("%s returned message %s twice", method, ts)
 			}
 			seen[ts] = true
 			out = append(out, m)
@@ -522,7 +610,7 @@ func (s *Session) pages(ctx context.Context, method string, p url.Values) ([]plu
 			return out, nil
 		}
 		if cursors[cursor] || len(cursors) >= 100000 {
-			return nil, pluginapi.ErrInvalid
+			return nil, invalid("%s paging did not terminate", method)
 		}
 		cursors[cursor] = true
 		params.Set("cursor", cursor)
@@ -691,10 +779,10 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 	var empty pluginapi.Snapshot
 	ts := root.TS
 	if !id(channel, "channel") || !id(ts, "ts") {
-		return empty, pluginapi.ErrInvalid
+		return empty, invalid("malformed channel or thread id")
 	}
 	if prev != nil && (prev.Manifest.TeamID != s.team || prev.Manifest.Channel != channel || prev.Manifest.RootTS != ts) {
-		return empty, pluginapi.ErrInvalid
+		return empty, invalid("stored archive belongs to a different workspace or thread")
 	}
 	messages, e := s.pages(ctx, "conversations.replies", url.Values{"channel": {channel}, "ts": {ts}, "limit": {"100"}})
 	if e != nil {
@@ -702,14 +790,14 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 	}
 	sort.Slice(messages, func(i, j int) bool { return numericTS(str(messages[i]["ts"]), str(messages[j]["ts"])) })
 	if len(messages) == 0 || messages[0]["ts"] != ts {
-		return empty, pluginapi.ErrInvalid
+		return empty, invalid("conversations.replies did not return the thread's first message")
 	}
 	count := int64(0)
 	if raw, has := root.Raw["reply_count"]; has {
 		var ok bool
 		count, ok = integer(raw)
 		if !ok || count < 0 {
-			return empty, pluginapi.ErrInvalid
+			return empty, invalid("thread has a malformed reply_count")
 		}
 	}
 	returned := int64(0)
@@ -717,122 +805,115 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 		var ok bool
 		returned, ok = integer(raw)
 		if !ok {
-			return empty, pluginapi.ErrInvalid
+			return empty, invalid("thread has a malformed reply_count")
 		}
 	}
 	if count != returned || int64(len(messages)) != count+1 {
-		return empty, pluginapi.ErrInvalid
+		// Usually a reply arrived or was removed between reads; the next check retries.
+		return empty, invalid("thread changed while it was read (reply_count %d/%d, %d replies returned); it is retried on the next check", count, returned, len(messages)-1)
 	}
-	// Preflight the full attachment inventory before fetching users or blobs.
-	// This bounds work even when an API returns many individually valid files.
-	var declared int64
-	declaredFiles := map[string]int64{}
-	for _, message := range messages {
-		entries, _, err := Content(message)
-		if err != nil {
-			return empty, err
+	// Stored author records may be reused when a lookup fails, except those
+	// that were themselves placeholders (recorded as user gaps).
+	prevUsers := map[string]pluginapi.Message{}
+	if prev != nil {
+		for uid, u := range prev.Users {
+			prevUsers[uid] = u
 		}
-		for _, entry := range entries {
-			fid := str(entry["id"])
-			size, ok := integer(entry["size"])
-			if !id(fid, "file") || !ok || size < 0 || size > maxFile {
-				return empty, pluginapi.ErrInvalid
-			}
-			if prior, exists := declaredFiles[fid]; exists {
-				if prior != size {
-					return empty, pluginapi.ErrInvalid
-				}
-				continue
-			}
-			declaredFiles[fid] = size
-			declared += size
-			if declared > maxSnapshot {
-				return empty, pluginapi.ErrInvalid
+		for _, g := range prev.Manifest.Gaps {
+			if g.Kind == "user" {
+				delete(prevUsers, g.ID)
 			}
 		}
 	}
 	users := map[string]pluginapi.Message{}
 	files := map[string]pluginapi.Attachment{}
 	blobs := map[string]pluginapi.Blob{}
+	gaps := []pluginapi.Gap{}
+	gapped := map[string]bool{}
+	gap := func(kind, item, message, reason string) {
+		if gapped[kind+"/"+item] {
+			return
+		}
+		gapped[kind+"/"+item] = true
+		gaps = append(gaps, pluginapi.Gap{Kind: kind, ID: item, Message: message, Reason: pluginapi.Redact(reason)})
+	}
 	var total int64
 	for i, m := range messages {
+		mts := str(m["ts"])
 		if thread, has := m["thread_ts"]; has && thread != ts || i > 0 && !has {
-			return empty, pluginapi.ErrInvalid
+			return empty, invalid("message %s does not belong to thread %s", mts, ts)
 		}
-		if !id(m["user"], "user") {
-			return empty, pluginapi.ErrInvalid
-		}
-		if _, has := users[str(m["user"])]; !has {
-			user, e := s.user(ctx, str(m["user"]))
-			if e != nil {
-				return empty, e
+		// Posts by apps and integrations (bot_message) may carry no user; the
+		// viewer names them from bot_profile/username instead.
+		if uid, has := m["user"]; has {
+			if !id(uid, "user") {
+				return empty, invalid("message %s has a malformed user id", mts)
 			}
-			users[str(m["user"])] = user
+			if _, done := users[str(uid)]; !done {
+				user, e := s.user(ctx, str(uid))
+				if e != nil {
+					if fatalRead(ctx, e) {
+						return empty, e
+					}
+					// Keep the thread: reuse the stored record or build a minimal
+					// one from the message's own profile, and record the gap.
+					if old := prevUsers[str(uid)]; old != nil && old["id"] == uid {
+						user = old
+					} else {
+						user = placeholderUser(str(uid), m)
+						gap("user", str(uid), mts, "author details unavailable: "+e.Error())
+					}
+				}
+				users[str(uid)] = user
+			}
 		}
 		entries, _, e := Content(m)
 		if e != nil {
-			return empty, e
+			return empty, fmt.Errorf("message %s: %w", mts, e)
 		}
 		for _, f := range entries {
 			fid := str(f["id"])
-			mode := str(f["mode"])
-			if !id(fid, "file") || f["is_external"] == true || f["deleted"] == true || mode != "" && mode != "hosted" && mode != "snippet" || f["file_access"] == "check_file_info" || f["file_access"] == "access_denied" {
-				return empty, pluginapi.ErrInvalid
+			if !id(fid, "file") {
+				gap("file", "", mts, "attachment without a valid file id")
+				continue
+			}
+			if _, done := files[fid]; done || gapped["file/"+fid] {
+				continue
+			}
+			if reason := fileSkipReason(f); reason != "" {
+				gap("file", fid, mts, reason)
+				continue
 			}
 			rawURL := str(f["url_private_download"])
 			if rawURL == "" {
 				rawURL = str(f["url_private"])
 			}
-			if FileURL(rawURL) != nil {
-				return empty, pluginapi.ErrInvalid
-			}
-			size, ok := integer(f["size"])
-			if !ok || size < 0 || size > maxFile {
-				return empty, pluginapi.ErrInvalid
-			}
-			if existing, has := files[fid]; has {
-				if existing.Size != size || existing.URL != rawURL {
-					return empty, pluginapi.ErrInvalid
-				}
+			size, _ := integer(f["size"])
+			if total+size > maxSnapshot {
+				gap("file", fid, mts, fmt.Sprintf("thread files exceed the %d MiB archive limit", maxSnapshot>>20))
 				continue
 			}
+			// Reserve the declared size before fetching so a thread never reads
+			// more than the archive limit, even when downloads fail.
 			total += size
-			if total > maxSnapshot {
-				return empty, pluginapi.ErrInvalid
-			}
 			p := "files/" + fid + ".bin"
-			var content []byte
-			cached := false
-			if prev != nil {
-				for _, entry := range prev.Manifest.Files {
-					if entry.ID == fid && entry.Size == size && entry.URL == rawURL {
-						b, ok := prev.Blobs[p]
-						o := prev.Manifest.Objects[p]
-						if !ok || entry.Path != p || b.Size != size || b.SHA256 != entry.SHA256 || o.Size != size || o.SHA256 != entry.SHA256 {
-							return empty, pluginapi.ErrInvalid
-						}
-						r, e := b.Open()
-						if e != nil {
-							return empty, pluginapi.ErrInvalid
-						}
-						content, e = io.ReadAll(io.LimitReader(r, size+1))
-						r.Close()
-						if e != nil || int64(len(content)) != size || sha(content) != entry.SHA256 {
-							return empty, pluginapi.ErrInvalid
-						}
-						cached = true
-						break
-					}
-				}
-			}
+			content, cached := cachedFile(prev, fid, p, size, rawURL)
 			if !cached {
 				content, e = s.client.Download(ctx, rawURL)
+				if errors.Is(e, errHTML) && int64(len(content)) == size && strings.Contains(str(f["mimetype"]), "html") {
+					e = nil // an uploaded HTML file, not a sign-in page
+				}
 				if e != nil {
-					return empty, e
+					if fatalRead(ctx, e) {
+						return empty, e
+					}
+					gap("file", fid, mts, "download failed: "+e.Error())
+					continue
 				}
 			}
 			if int64(len(content)) != size {
-				return empty, pluginapi.ErrInvalid
+				gap("file", fid, mts, fmt.Sprintf("download size %d does not match the declared %d bytes", len(content), size))
+				continue
 			}
 			name := str(f["name"])
 			if name == "" {
@@ -859,34 +940,135 @@ func (s *Session) Snapshot(ctx context.Context, channel string, root pluginapi.R
 		if i >= 200 {
 			break
 		}
+		// Mentions are display sugar: an unresolvable one renders as its id.
 		user, e := s.user(ctx, uid)
 		if e == nil {
 			users[uid] = user
-		} else {
-			var api apiError
-			if !errors.As(e, &api) {
-				return empty, e
-			}
+		} else if fatalRead(ctx, e) {
+			return empty, e
+		} else if old := prevUsers[uid]; old != nil && old["id"] == uid {
+			users[uid] = old
 		}
 	}
+	link := ""
 	doc, e := s.client.Call(ctx, "chat.getPermalink", url.Values{"channel": {channel}, "message_ts": {ts}})
-	if e != nil {
+	if e == nil {
+		link = str(doc["permalink"])
+	} else if fatalRead(ctx, e) {
 		return empty, e
 	}
-	link := str(doc["permalink"])
+	if Permalink(link, channel, true) != nil && prev != nil && Permalink(prev.Manifest.Permalink, channel, true) == nil {
+		link = prev.Manifest.Permalink
+	}
 	if Permalink(link, channel, true) != nil {
-		return empty, pluginapi.ErrInvalid
+		if e != nil {
+			return empty, e
+		}
+		return empty, invalid("chat.getPermalink returned an unexpected link")
 	}
 	entries := []pluginapi.Attachment{}
 	for _, f := range files {
 		entries = append(entries, f)
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ID < entries[j].ID })
-	v := pluginapi.Snapshot{Manifest: pluginapi.ArchiveManifest{Schema: 1, TeamID: s.team, Channel: channel, RootTS: ts, Permalink: link, MessageCount: len(messages), Files: entries}, Messages: messages, Users: users, Blobs: blobs}
+	if len(gaps) == 0 {
+		gaps = nil
+	}
+	v := pluginapi.Snapshot{Manifest: pluginapi.ArchiveManifest{Schema: 1, TeamID: s.team, Channel: channel, RootTS: ts, Permalink: link, MessageCount: len(messages), Files: entries, Gaps: gaps}, Messages: messages, Users: users, Blobs: blobs}
 	if e = (Hooks{}).Validate(ctx, v); e != nil {
 		return empty, e
 	}
 	return v, nil
+}
+
+// fatalRead reports errors that must abort the whole capture instead of being
+// recorded as a per-item gap: cancellation and rate limiting are transient and
+// retried by the next check, and nothing partial should be stored for them.
+func fatalRead(ctx context.Context, e error) bool {
+	return ctx.Err() != nil || errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) || errors.Is(e, errRateLimited)
+}
+
+// fileSkipReason explains why a file entry cannot be downloaded, or "".
+func fileSkipReason(f map[string]any) string {
+	mode := str(f["mode"])
+	switch {
+	case f["deleted"] == true || mode == "tombstone":
+		return "file was deleted"
+	case mode == "hidden_by_limit":
+		return "file is hidden by the workspace plan's history limit"
+	case f["is_external"] == true || mode == "external":
+		return "external file (stored outside Slack)"
+	case mode != "" && mode != "hosted" && mode != "snippet":
+		return "file type " + label(mode) + " cannot be downloaded"
+	case f["file_access"] == "check_file_info" || f["file_access"] == "access_denied":
+		return "file access restricted (" + str(f["file_access"]) + "); the bot cannot read it"
+	}
+	rawURL := str(f["url_private_download"])
+	if rawURL == "" {
+		rawURL = str(f["url_private"])
+	}
+	if rawURL == "" {
+		return "file has no download URL"
+	}
+	if FileURL(rawURL) != nil {
+		return "file URL is not on files.slack.com"
+	}
+	size, ok := integer(f["size"])
+	if !ok || size < 0 {
+		return "file has no valid size"
+	}
+	if size > maxFile {
+		return fmt.Sprintf("file is larger than the %d MiB limit", maxFile>>20)
+	}
+	return ""
+}
+
+// cachedFile reuses a verified blob from the previous archive generation.
+// A blob that fails verification is simply downloaded again.
+func cachedFile(prev *pluginapi.Snapshot, fid, p string, size int64, rawURL string) ([]byte, bool) {
+	if prev == nil {
+		return nil, false
+	}
+	for _, entry := range prev.Manifest.Files {
+		if entry.ID != fid || entry.Size != size || entry.URL != rawURL {
+			continue
+		}
+		b, ok := prev.Blobs[p]
+		o := prev.Manifest.Objects[p]
+		if !ok || entry.Path != p || b.Size != size || b.SHA256 != entry.SHA256 || o.Size != size || o.SHA256 != entry.SHA256 {
+			return nil, false
+		}
+		r, e := b.Open()
+		if e != nil {
+			return nil, false
+		}
+		content, e := io.ReadAll(io.LimitReader(r, size+1))
+		r.Close()
+		if e != nil || int64(len(content)) != size || sha(content) != entry.SHA256 {
+			return nil, false
+		}
+		return content, true
+	}
+	return nil, false
+}
+
+// placeholderUser is a minimal author record built from the message itself
+// when users.info cannot be read.
+func placeholderUser(uid string, m pluginapi.Message) pluginapi.Message {
+	user := pluginapi.Message{"id": uid}
+	if p, ok := m["user_profile"].(map[string]any); ok {
+		profile := map[string]any{}
+		for _, k := range []string{"display_name", "real_name", "name"} {
+			if v, ok := p[k].(string); ok {
+				profile[k] = v
+			}
+		}
+		user["profile"] = profile
+		if v, ok := p["name"].(string); ok {
+			user["name"] = v
+		}
+	}
+	return user
 }
 func numericTS(a, b string) bool {
 	aa := strings.Split(a, ".")

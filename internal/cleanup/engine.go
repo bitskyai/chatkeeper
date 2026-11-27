@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/bitskyai/chatkeeper/internal/core"
 	"github.com/bitskyai/chatkeeper/internal/storage"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"runtime"
@@ -199,6 +200,11 @@ func runThread(ctx context.Context, w pluginapi.Workspace, k pluginapi.Key, v *s
 				return errors.New(reason)
 			}
 		}
+	}
+	// Deleting the source would lose items the archive has not captured yet
+	// (failed downloads, unreadable authors): wait until they are recovered.
+	if len(m.Gaps) > 0 {
+		return errors.New("archive incomplete: " + core.GapSummary(m.Gaps))
 	}
 	t.Proof = hash(snap.Documents["manifest.json"])
 	ordered := append([]pluginapi.Message{}, snap.Messages[1:]...)

@@ -120,6 +120,9 @@ func (r *Runtime) CheckNow(ctx context.Context) CheckReport {
 			if h.ErrorClass != "" {
 				report.Error += ", last error: " + h.ErrorClass
 			}
+			if h.LastError != "" {
+				report.Error += ": " + h.LastError
+			}
 			report.Error += ")"
 		}
 		report.Error += ". It retries automatically; check again shortly or see Settings."
@@ -242,7 +245,7 @@ func (c *ChannelCheck) addRoot(k pluginapi.RootRef, matched bool) {
 	c.Roots = append(c.Roots, RootCheck{RootTS: k.RootTS, Reactions: names, Matched: matched, Result: result})
 }
 
-func (c *ChannelCheck) result(root string, changed, archived bool, e error) {
+func (c *ChannelCheck) result(root string, changed, archived bool, cause string, gaps []pluginapi.Gap) {
 	var entry *RootCheck
 	for i := range c.Roots {
 		if c.Roots[i].RootTS == root {
@@ -250,7 +253,7 @@ func (c *ChannelCheck) result(root string, changed, archived bool, e error) {
 		}
 	}
 	if entry == nil {
-		if e == nil && !changed {
+		if cause == "" && !changed {
 			// Previously archived threads are re-checked silently when unchanged.
 			return
 		}
@@ -258,8 +261,10 @@ func (c *ChannelCheck) result(root string, changed, archived bool, e error) {
 		entry = &c.Roots[len(c.Roots)-1]
 	}
 	switch {
-	case e != nil:
-		entry.Result = "archive failed: " + e.Error()
+	case cause != "":
+		entry.Result = "archive failed: " + cause
+	case changed && len(gaps) > 0:
+		entry.Result = "archived; " + GapSummary(gaps)
 	case changed:
 		entry.Result = "archived"
 	case archived:
@@ -327,7 +332,7 @@ func (c *CheckReport) hints() {
 					add("Thread %s in %s has some trigger reactions, but the rule needs %s.", root.RootTS, label, rule)
 				}
 			}
-			if strings.HasPrefix(root.Result, "archive failed") || strings.HasPrefix(root.Result, "not archived") {
+			if strings.HasPrefix(root.Result, "archive failed") || strings.HasPrefix(root.Result, "not archived") || strings.HasPrefix(root.Result, "archived; ") {
 				add("Thread %s in %s: %s", root.RootTS, label, root.Result)
 			}
 		}

@@ -242,11 +242,32 @@ func TestSnapshotBudgetBeforeDownload(t *testing.T) {
 		}
 		return response(200, `{"ok":false,"error":"unexpected"}`), nil
 	})})}
-	if _, e := s.Snapshot(context.Background(), "CFIXTURE", pluginapi.Root{TS: "100.000001", Raw: root}, nil); e == nil {
-		t.Fatal("budget accepted")
+	s.client = NewClient("xoxb-synthetic", &http.Client{Transport: route(func(r *http.Request) (*http.Response, error) {
+		requests = append(requests, r.URL.Path)
+		switch r.URL.Path {
+		case "/api/conversations.replies":
+			b, _ := json.Marshal(map[string]any{"ok": true, "messages": []any{root}})
+			return response(200, string(b)), nil
+		case "/api/users.info":
+			return response(200, `{"ok":true,"user":{"id":"UOWNER"}}`), nil
+		case "/api/chat.getPermalink":
+			return response(200, `{"ok":true,"permalink":"https://fixture.slack.com/archives/CFIXTURE/p100000001"}`), nil
+		}
+		return response(404, ``), nil
+	})})
+	// The archive budget is reserved before each download: files beyond it are
+	// recorded as gaps and never fetched, and the thread itself is kept.
+	v, e := s.Snapshot(context.Background(), "CFIXTURE", pluginapi.Root{TS: "100.000001", Raw: root}, nil)
+	if e != nil {
+		t.Fatal(e)
 	}
-	if len(requests) != 1 {
-		t.Fatal("budget checked after additional fetches", requests)
+	for _, path := range requests {
+		if path == "/F6" {
+			t.Fatal("file beyond the budget was fetched", requests)
+		}
+	}
+	if len(v.Manifest.Gaps) != 6 || !strings.Contains(v.Manifest.Gaps[5].Reason, "archive limit") || v.Manifest.Gaps[5].ID != "F6" {
+		t.Fatalf("%#v", v.Manifest.Gaps)
 	}
 }
 

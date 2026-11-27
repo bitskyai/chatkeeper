@@ -3,12 +3,78 @@ package core
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
+	"runtime"
 	"time"
 )
 
 var ErrPanic = errors.New("plugin panic")
 var ErrTimeout = errors.New("plugin timeout")
 var ErrPlugin = errors.New("plugin failure")
+
+// PluginError contains a plugin's error: errors.Is(err, ErrPlugin) holds, the
+// original value is dropped (so it cannot impersonate core sentinels such as
+// ErrTimeout), and only a redacted, bounded description of its cause is shown.
+// detail keeps the whole untruncated cause so a caller
+// that knows the workspace credentials can remove them before Redact truncates;
+// otherwise a credential crossing the truncation boundary would leak its prefix.
+// It is never rendered except through pluginapi.Redact.
+type PluginError struct {
+	Cause  string
+	detail string
+}
+
+// maxDetail bounds the retained raw cause. A cause over the bound is never
+// truncated (truncation before credential removal can leak a credential's
+// prefix, and whitespace collapsing or redaction can pull the cut point into the
+// visible window); it is replaced by a size-only description instead.
+const maxDetail = 1 << 20
+
+func (e *PluginError) Error() string {
+	if e.Cause == "" {
+		return ErrPlugin.Error()
+	}
+	return ErrPlugin.Error() + ": " + e.Cause
+}
+func (e *PluginError) Is(target error) bool { return target == ErrPlugin }
+
+// Contain converts an error returned by plugin code into a PluginError.
+// Context cancellation passes through unchanged.
+func Contain(e error) error {
+	if e == nil || errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) {
+		return e
+	}
+	var pe *PluginError
+	if errors.As(e, &pe) {
+		return &PluginError{Cause: pluginapi.Redact(pe.Cause), detail: pe.detail}
+	}
+	raw := e.Error()
+	if len(raw) > maxDetail {
+		return &PluginError{Cause: fmt.Sprintf("error message too large to show (%d bytes)", len(raw))}
+	}
+	return &PluginError{Cause: pluginapi.Redact(raw), detail: raw}
+}
+
+// panicError keeps ErrPanic identity and a redacted description of the value.
+type panicError struct{ cause string }
+
+func (e *panicError) Error() string {
+	if e.cause == "" {
+		return ErrPanic.Error()
+	}
+	return ErrPanic.Error() + ": " + e.cause
+}
+func (e *panicError) Is(target error) bool { return target == ErrPanic }
+
+// containPanic keeps the description only of runtime faults (nil dereference,
+// index out of range); arbitrary panic values may carry plugin data and are dropped.
+func containPanic(v any) error {
+	if re, ok := v.(runtime.Error); ok {
+		return &panicError{cause: pluginapi.Redact(re.Error())}
+	}
+	return &panicError{}
+}
 
 type result[T any] struct {
 	v   T
@@ -32,8 +98,8 @@ func Call[T any](ctx context.Context, timeout time.Duration, fn func(context.Con
 	go func() {
 		r := result[T]{}
 		defer func() {
-			if recover() != nil {
-				r.err = ErrPanic
+			if v := recover(); v != nil {
+				r.err = containPanic(v)
 			}
 			ch <- r
 		}()
@@ -44,9 +110,7 @@ func Call[T any](ctx context.Context, timeout time.Duration, fn func(context.Con
 			return
 		}
 		r.v, r.err = fn(callCtx)
-		if r.err != nil && !errors.Is(r.err, context.Canceled) && !errors.Is(r.err, context.DeadlineExceeded) {
-			r.err = ErrPlugin
-		}
+		r.err = Contain(r.err)
 	}()
 	select {
 	case r := <-ch:
