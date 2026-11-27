@@ -96,6 +96,15 @@ func (r *Runtime) setLastError(cause string) {
 // noteResult logs and records a thread capture failure once per distinct cause,
 // and records a successful capture that stored only part of the thread.
 func (r *Runtime) noteResult(ctx context.Context, k pluginapi.Key, changed bool, e error) {
+	result := "unchanged"
+	if changed {
+		result = "archived"
+	}
+	if e != nil {
+		result = "failed"
+	}
+	r.logger().Info("thread archive result", "workspace", r.Workspace.ID, "channel", k.Channel, "root", k.RootTS, "result", result)
+
 	if e != nil {
 		if ctx.Err() != nil || errors.Is(e, context.Canceled) {
 			return
