@@ -122,23 +122,53 @@ remote access (for example `--set allowedHosts=chatkeeper.example.com --set secu
 Back up the volume before upgrades; keep only one writer per archive.
 
 To build from source, use Go 1.26+: `go build -trimpath -o chatkeeper ./cmd/chatkeeper`.
+The Slack plugin vendors standard emoji short names and glyphs generated from
+[iamcal/emoji-data](https://github.com/iamcal/emoji-data) (MIT, see
+`internal/plugins/slack/emoji/LICENSE`). The source commit and SHA-256 are pinned
+in `tools/generate-emoji.py` and `internal/plugins/slack/emoji/NOTICE`; the
+generator refuses an input whose hash differs.
 To build a container: `docker build -t chatkeeper:local .` (BuildKit required).
 
 ## Slack app setup
 
 The wizard guides these steps and checks credentials before saving a workspace:
 
-1. Create a Slack app in your workspace. Add bot scopes `channels:history`,
-   `channels:read`, `groups:history`, `groups:read`, `reactions:read`, `users:read`,
-   and `files:read`, then install it and copy the bot token.
-2. Optionally enable Socket Mode and generate an app token with `connections:write`.
-   Subscribe bot events to `reaction_added`, `reaction_removed`, `message.channels`
-   and `message.groups`. Polling also runs to repair gaps.
-3. Invite the bot to each watched channel, including private channels. Paste
-   credentials into the wizard, select channels, reaction names and owner rules.
-4. Put all selected reactions on a thread's root. An owner rule requires the
-   same selected owner to supply all reactions. Removing a trigger stops future
-   refreshes and keeps the existing archive.
+1. Create a Slack app in your workspace from the wizard's manifest (bot scopes
+   `channels:history`, `channels:read`, `groups:history`, `groups:read`,
+   `reactions:read`, `users:read`, `files:read`; optional `emoji:read` adds custom
+   workspace emoji to the reaction picker). Install it and copy the bot token,
+   then click **Test connection** to see the workspace, bot user and every
+   granted or missing scope.
+2. Slack's Install App page shows only the bot token. For instant capture, the
+   wizard links to your app's Basic Information page: under App-Level Tokens,
+   generate a token with `connections:write` and test the Socket Mode connection.
+   The manifest already enables Socket Mode and subscribes `reaction_added`,
+   `reaction_removed`, `message.channels` and `message.groups`. Without an app
+   token choose **Continue with polling only**.
+3. Invite the bot to each watched channel, including private channels, then
+   select channels and one or more reactions. Every step has **Back**; entered
+   values are kept and secrets stay server-side (shown as saved).
+4. Add a selected reaction to a thread. With Socket Mode connected, a reaction
+   on **any message in the thread** (the first message or a reply) archives the
+   whole thread: ChatKeeper maps the reacted reply to its thread root with one
+   cached `conversations.replies` read. Polling reads only reactions on the
+   **first message** (one history read per channel per poll), so in polling-only
+   mode, or for a reply reaction added while Socket Mode was disconnected, react
+   on the first message. Skin tones count: `+1` matches `+1::skin-tone-N` of any
+   tone; configure `+1::skin-tone-3` to require one tone. The wizard writes
+   `trigger.match: any`; without `match` (or with `match: all`) every listed
+   reaction must be on the root, as in earlier releases. An owner rule requires a
+   selected owner to supply the matching reactions. Removing a trigger stops
+   future refreshes and keeps the existing archive.
+5. On the live test, **Check now** scans immediately and shows a log: channels
+   and bot membership, thread roots scanned, reactions found, and why nothing
+   matched. The dashboard lists recent capture events.
+
+Polling also runs with Socket Mode and repairs missed events. Each poll rescans
+thread roots posted in the last 24 hours, because a reaction can land on an
+older root at any time; a full history scan runs hourly and on **Check now**.
+When Slack answers HTTP 429, its `Retry-After` is honored across polls and
+reconnects: reads pause until the cooldown ends instead of retrying early.
 
 For managed YAML, copy [examples/config.yaml](examples/config.yaml) and replace
 synthetic IDs and credential environment names. Storage paths resolve relative to

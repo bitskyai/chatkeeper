@@ -248,7 +248,7 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 		}
 		if v, has := raw["trigger"]; has {
 			t, ok := mapping(v)
-			if !ok || !keys(t, "reactions", "who", "owners") {
+			if !ok || !keys(t, "reactions", "who", "owners", "match") {
 				return nil, ErrConfig
 			}
 			if v, has := t["reactions"]; has {
@@ -262,6 +262,12 @@ func loadConfig(name string, requireSecrets bool, resolve func(string) string, r
 			}
 			if ws.Trigger.Who != "any" && ws.Trigger.Who != "owner" {
 				return nil, ErrConfig
+			}
+			if v, has := t["match"]; has {
+				ws.Trigger.Match = text(v)
+				if ws.Trigger.Match != "any" && ws.Trigger.Match != "all" {
+					return nil, ErrConfig
+				}
 			}
 			if v, has := t["owners"]; has {
 				ws.Trigger.Owners, ok = stringList(v)

@@ -21,6 +21,8 @@ type Server struct {
 	mu             sync.Mutex
 	writeMu        sync.Mutex
 	marked         bool
+	replyMarked    bool
+	reaction       string
 	conn           *websocket.Conn
 	counts         map[string]int
 	requests       []request
@@ -47,7 +49,13 @@ func New(t testing.TB) *Server {
 	})
 	return s
 }
-func (s *Server) Mark(v bool)             { s.mu.Lock(); s.marked = v; s.mu.Unlock() }
+func (s *Server) Mark(v bool) { s.mu.Lock(); s.marked = v; s.mu.Unlock() }
+
+// MarkReply puts the trigger reaction on the reply instead of the root.
+func (s *Server) MarkReply(v bool) { s.mu.Lock(); s.replyMarked = v; s.mu.Unlock() }
+
+// SetReaction changes the reaction name used by Mark and MarkReply.
+func (s *Server) SetReaction(name string) { s.mu.Lock(); s.reaction = name; s.mu.Unlock() }
 func (s *Server) Calls(method string) int { s.mu.Lock(); defer s.mu.Unlock(); return s.counts[method] }
 func (s *Server) Acknowledgements() int   { s.mu.Lock(); defer s.mu.Unlock(); return s.acks }
 func (s *Server) Connected() bool         { s.mu.Lock(); defer s.mu.Unlock(); return s.conn != nil }
@@ -120,6 +128,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		s.conn = c
 		s.mu.Unlock()
+		s.writeMu.Lock()
+		_ = c.Write(s.ctx, websocket.MessageText, []byte(`{"type":"hello","num_connections":1}`))
+		s.writeMu.Unlock()
 		defer func() {
 			s.mu.Lock()
 			if s.conn == c {
@@ -148,8 +159,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.counts[method]++
 	s.requests = append(s.requests, request{method, r.Header.Get("Authorization")})
-	marked := s.marked
+	marked, replyMarked, reaction := s.marked, s.replyMarked, s.reaction
 	s.mu.Unlock()
+	if reaction == "" {
+		reaction = "white_check_mark"
+	}
 	if override := s.Overrides[method]; override != nil {
 		override(w, r)
 		return
@@ -158,24 +172,45 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-OAuth-Scopes", "channels:history,channels:read,groups:history,groups:read,reactions:read,users:read,files:read")
 	root := map[string]any{"ts": "100.000001", "user": "UOWNER", "text": "Synthetic root <@UMENTION>", "reply_count": 1, "files": []any{map[string]any{"id": "FFILE", "name": "fixture.bin", "size": 5, "url_private": "https://files.slack.com/file"}}}
 	if marked {
-		root["reactions"] = []any{map[string]any{"name": "white_check_mark", "count": 1, "users": []string{"UOWNER"}}}
+		root["reactions"] = []any{map[string]any{"name": reaction, "count": 1, "users": []string{"UOWNER"}}}
 	}
 	reply := map[string]any{"ts": "101.000001", "thread_ts": "100.000001", "user": "UAUTHOR", "text": "Synthetic reply"}
+	if replyMarked {
+		reply["reactions"] = []any{map[string]any{"name": reaction, "count": 1, "users": []string{"UOWNER"}}}
+	}
 	doc := map[string]any{"ok": true}
 	switch method {
 	case "auth.test":
 		doc["team_id"] = "TFIXTURE"
+		doc["team"] = "Fixture"
 		doc["user_id"] = "UBOT"
+		doc["user"] = "fixturebot"
+		doc["bot_id"] = "BFIXTURE"
+	case "bots.info":
+		doc["bot"] = map[string]any{"id": "BFIXTURE", "app_id": "AFIXTURE"}
+	case "conversations.info":
+		doc["channel"] = map[string]any{"id": r.URL.Query().Get("channel"), "name": "fixture", "is_member": r.URL.Query().Get("channel") == "CFIXTURE"}
+	case "emoji.list":
+		doc["emoji"] = map[string]any{"fixture_parrot": "https://emoji.slack-edge.com/TFIXTURE/fixture_parrot/0.png", "fixture_ok": "alias:white_check_mark"}
 	case "users.conversations", "conversations.list":
 		doc["channels"] = []any{map[string]any{"id": "CFIXTURE", "name": "fixture", "context_team_id": "TFIXTURE"}}
 	case "conversations.history":
 		doc["messages"] = []any{root}
 	case "conversations.replies":
 		doc["messages"] = []any{root, reply}
+		if r.URL.Query().Get("limit") == "1" {
+			s.mu.Lock()
+			s.counts["conversations.replies/root"]++
+			s.mu.Unlock()
+			doc["messages"] = []any{root}
+		}
 	case "reactions.get":
 		doc["type"] = "message"
 		doc["channel"] = r.URL.Query().Get("channel")
 		doc["message"] = root
+		if r.URL.Query().Get("timestamp") == reply["ts"] {
+			doc["message"] = reply
+		}
 	case "users.info":
 		uid := r.URL.Query().Get("user")
 		name := map[string]string{"UOWNER": "Fixture owner", "UAUTHOR": "Fixture author", "UMENTION": "Fixture mention"}[uid]

@@ -5,6 +5,10 @@ import (
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 )
 
+// MatchAny reports whether a rule archives when any one listed reaction is present.
+// Rules without an explicit mode keep the legacy all-reactions semantics.
+func MatchAny(rule pluginapi.Trigger) bool { return rule.Match == "any" }
+
 func Matches(rule pluginapi.Trigger, root pluginapi.Root) (bool, error) {
 	if root.TS == "" || root.ThreadTS != "" && root.ThreadTS != root.TS || len(rule.Reactions) == 0 {
 		return false, nil
@@ -23,26 +27,30 @@ func Matches(rule pluginapi.Trigger, root pluginapi.Root) (bool, error) {
 		}
 		membership[r.Name] = r
 	}
+	present := 0
 	for name := range required {
-		if membership[name].Count < 1 {
-			return false, nil
+		if membership[name].Count >= 1 {
+			present++
 		}
+	}
+	any := MatchAny(rule)
+	if present == 0 || !any && present < len(required) {
+		return false, nil
 	}
 	if rule.Who != "owner" {
 		return true, nil
 	}
 	for _, owner := range rule.Owners {
-		all := true
+		supplied := 0
 		for name := range required {
-			found := false
 			for _, u := range membership[name].Users {
 				if u == owner {
-					found = true
+					supplied++
+					break
 				}
 			}
-			all = all && found
 		}
-		if all {
+		if any && supplied > 0 || !any && supplied == len(required) {
 			return true, nil
 		}
 	}

@@ -1,5 +1,5 @@
 name: Desktop
-# macOS menu-bar app: build + test on PRs touching it; on v* tags build the
+# macOS menu-bar app: build + test on PRs touching it or its bundled server; on v* tags build the
 # DMG/zip, attach them to the GitHub Release created by release.yml, publish
 # the Sparkle appcast (when an EdDSA key is configured) and the Homebrew cask
 # (when HOMEBREW_TAP_TOKEN is configured).
@@ -7,17 +7,21 @@ on:
   pull_request:
     paths:
       - 'desktop/**'
-      - 'internal/web/desktop*.go'
+      - 'internal/**'
+      - 'pkg/**'
       - 'cmd/chatkeeper/**'
-      - 'internal/app/**'
+      - 'go.mod'
+      - 'go.sum'
       - '.github/workflows/desktop.yml'
   push:
     branches: [main]
     paths:
       - 'desktop/**'
-      - 'internal/web/desktop*.go'
+      - 'internal/**'
+      - 'pkg/**'
       - 'cmd/chatkeeper/**'
-      - 'internal/app/**'
+      - 'go.mod'
+      - 'go.sum'
       - '.github/workflows/desktop.yml'
     tags: ['v*']
 permissions:

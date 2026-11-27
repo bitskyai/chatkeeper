@@ -23,10 +23,12 @@ func SocketURL(raw string) error {
 func (s *Session) listen(ctx context.Context, sink pluginapi.EventSink) error {
 	b, e := s.client.get(ctx, "POST", "https://slack.com/api/apps.connections.open", s.appToken, maxJSON, false)
 	if e != nil {
+		s.live.set(false, "Could not reach Slack to open Socket Mode.")
 		return e
 	}
 	doc, e := parse(b)
 	if e != nil {
+		s.live.set(false, "Slack refused the app-level token ("+e.Error()+"). Check connections:write and that Socket Mode is enabled.")
 		return e
 	}
 	rawURL := str(doc["url"])
@@ -38,6 +40,8 @@ func (s *Session) listen(ctx context.Context, sink pluginapi.EventSink) error {
 		return errAPI
 	}
 	defer conn.CloseNow()
+	s.live.set(true, "")
+	defer s.live.set(false, "The Socket Mode connection closed; reconnecting.")
 	conn.SetReadLimit(maxJSON)
 	sink(pluginapi.Event{Kind: "backfill"})
 	for {
@@ -75,6 +79,9 @@ func (s *Session) listen(ctx context.Context, sink pluginapi.EventSink) error {
 			continue
 		}
 		event := Event(payload.Event)
+		if event.Kind == "reaction" && s.triggers[baseReaction(str(payload.Event["reaction"]))] {
+			event = s.reactionRoot(ctx, event)
+		}
 		if event.Kind != "" {
 			sink(event)
 		}
@@ -101,4 +108,15 @@ func (s *Session) Start(ctx context.Context, sink pluginapi.EventSink) error {
 		delay = min(delay*2, 30*time.Second)
 	}
 	return ctx.Err()
+}
+
+// reactionRoot maps a trigger reaction on a thread reply to its root so the
+// runtime can archive the thread. Slack's reaction events name only the
+// reacted message; on lookup failure the event is passed through unchanged.
+func (s *Session) reactionRoot(ctx context.Context, event pluginapi.Event) pluginapi.Event {
+	root, e := s.threadRoot(ctx, event.Channel, event.RootTS)
+	if e != nil || root == event.RootTS {
+		return event
+	}
+	return pluginapi.Event{Channel: event.Channel, RootTS: root, Kind: event.Kind, ItemTS: event.RootTS}
 }

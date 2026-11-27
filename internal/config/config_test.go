@@ -49,6 +49,19 @@ func TestLoad(t *testing.T) {
 		t.Fatal("missing scoped credential")
 	}
 }
+func TestTriggerMatchModes(t *testing.T) {
+	t.Setenv("FIXTURE_BOT_TOKEN", "xoxb-synthetic")
+	for _, mode := range []string{"", "any", "all"} {
+		cfg := valid
+		if mode != "" {
+			cfg = strings.Replace(valid, "[white_check_mark]", "[white_check_mark, bookmark]\n      match: "+mode, 1)
+		}
+		c, e := load(t, cfg, true)
+		if e != nil || c.Workspaces[0].Workspace.Trigger.Match != mode {
+			t.Fatal(mode, e)
+		}
+	}
+}
 func TestOffline(t *testing.T) {
 	t.Setenv("FIXTURE_BOT_TOKEN", "")
 	if _, e := load(t, valid, false); e != nil {
@@ -61,7 +74,7 @@ func TestOffline(t *testing.T) {
 func TestInvalidConfig(t *testing.T) {
 	t.Setenv("FIXTURE_BOT_TOKEN", "xoxb-synthetic")
 	for name, s := range map[string]string{
-		"unknown": valid + "unknown: true\n", "duplicate key": valid + "server: {}\n", "unknown workspace": strings.Replace(valid, "team_id:", "unexpected:", 1), "reserved": strings.Replace(valid, "id: fixture", "id: api", 1), "bad id": strings.Replace(valid, "id: fixture", "id: ../escape", 1), "bad team": strings.ReplaceAll(valid, "TFIXTURE", "wrong"), "empty reactions": strings.Replace(valid, "[white_check_mark]", "[]", 1), "duplicate reactions": strings.Replace(valid, "[white_check_mark]", "[white_check_mark, white_check_mark]", 1), "no owner": strings.Replace(valid, "[UOWNER]", "[]", 1), "bad who": strings.Replace(valid, "who: owner", "who: unknown", 1), "poll zero": valid + "    poll_interval: 0\n", "poll bool": valid + "    poll_interval: true\n", "storage type": strings.Replace(valid, "type: folder", "type: git", 1), "inline token": valid + "    bot_token: secret\n", "cleanup invalid": valid + "    cleanup: {enabled: yes}\n", "duplicate channels": strings.Replace(valid, "[CFIXTURE]", "[CFIXTURE, CFIXTURE]", 1), "bad channels": strings.Replace(valid, "[CFIXTURE]", "[../escape]", 1), "multiple documents": valid + "---\n{}\n",
+		"unknown": valid + "unknown: true\n", "duplicate key": valid + "server: {}\n", "unknown workspace": strings.Replace(valid, "team_id:", "unexpected:", 1), "reserved": strings.Replace(valid, "id: fixture", "id: api", 1), "bad id": strings.Replace(valid, "id: fixture", "id: ../escape", 1), "bad team": strings.ReplaceAll(valid, "TFIXTURE", "wrong"), "empty reactions": strings.Replace(valid, "[white_check_mark]", "[]", 1), "duplicate reactions": strings.Replace(valid, "[white_check_mark]", "[white_check_mark, white_check_mark]", 1), "no owner": strings.Replace(valid, "[UOWNER]", "[]", 1), "bad who": strings.Replace(valid, "who: owner", "who: unknown", 1), "bad match": strings.Replace(valid, "who: owner", "who: owner\n      match: sometimes", 1), "poll zero": valid + "    poll_interval: 0\n", "poll bool": valid + "    poll_interval: true\n", "storage type": strings.Replace(valid, "type: folder", "type: git", 1), "inline token": valid + "    bot_token: secret\n", "cleanup invalid": valid + "    cleanup: {enabled: yes}\n", "duplicate channels": strings.Replace(valid, "[CFIXTURE]", "[CFIXTURE, CFIXTURE]", 1), "bad channels": strings.Replace(valid, "[CFIXTURE]", "[../escape]", 1), "multiple documents": valid + "---\n{}\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, e := load(t, s, true); e == nil {

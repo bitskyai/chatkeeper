@@ -11,9 +11,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,13 +24,12 @@ const maxFile int64 = 100 << 20
 const maxSnapshot int64 = 512 << 20
 
 var errAPI = errors.New("API read failed")
-var errRateLimited = errors.New("API read rate limit exhausted")
 
 type apiError struct{ code string }
 
 func (e apiError) Error() string { return "API read failed: " + e.code }
 
-var readMethods = map[string]bool{"auth.test": true, "conversations.history": true, "conversations.replies": true, "reactions.get": true, "users.info": true, "users.list": true, "chat.getPermalink": true, "users.conversations": true, "conversations.list": true}
+var readMethods = map[string]bool{"auth.test": true, "conversations.history": true, "conversations.replies": true, "reactions.get": true, "users.info": true, "users.list": true, "chat.getPermalink": true, "users.conversations": true, "conversations.list": true, "conversations.info": true, "emoji.list": true, "bots.info": true}
 
 type Client struct {
 	token string
@@ -46,9 +47,58 @@ func NewClient(token string, transport *http.Client) *Client {
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{token: token, http: &c}
 }
+
+// errRateLimited is returned while an API Retry-After cooldown is in effect and
+// the caller cannot wait that long; the next poll tries again.
+var errRateLimited = errors.New("API rate limited; waiting for Retry-After before the next read")
+
+// cooldowns remembers 429 Retry-After deadlines per token so they are honored
+// across polls and across session restarts, not only within one request.
+var cooldowns sync.Map
+
+const defaultCooldown = 60 * time.Second
+const maxCooldown = time.Duration(1<<63 - 1)
+
+func cooldownKey(token string) string { return sha([]byte(token)) }
+func (c *Client) cooldown() time.Duration {
+	v, ok := cooldowns.Load(cooldownKey(c.token))
+	if !ok {
+		return 0
+	}
+	return time.Until(v.(time.Time))
+}
+func (c *Client) coolUntil(wait time.Duration) {
+	until := time.Now().Add(wait)
+	key := cooldownKey(c.token)
+	if v, ok := cooldowns.Load(key); ok && v.(time.Time).After(until) {
+		return
+	}
+	cooldowns.Store(key, until)
+}
+
+// waitCooldown sleeps through an active cooldown when the context allows it,
+// and fails fast otherwise so a poll never stalls into a hook timeout.
+func (c *Client) waitCooldown(ctx context.Context) error {
+	wait := c.cooldown()
+	if wait <= 0 {
+		return nil
+	}
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline)-time.Second < wait {
+		return errRateLimited
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(wait):
+		return nil
+	}
+}
 func (c *Client) get(ctx context.Context, method, rawURL, token string, limit int64, file bool) ([]byte, error) {
 	retries, redirects := 0, 0
 	for {
+		if e := c.waitCooldown(ctx); e != nil {
+			return nil, e
+		}
 		if file && (redirects == 0 && FileURL(rawURL) != nil || redirects > 0 && fileRedirectURL(rawURL) != nil) {
 			return nil, pluginapi.ErrInvalid
 		}
@@ -77,23 +127,23 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 		if e != nil {
 			return nil, errAPI
 		}
-		if res.StatusCode == 429 && retries < 3 {
+		if res.StatusCode == 429 {
 			res.Body.Close()
-			wait, e := strconv.Atoi(res.Header.Get("Retry-After"))
-			if e != nil || wait < 0 || wait > 300 {
+			seconds, e := strconv.Atoi(res.Header.Get("Retry-After"))
+			wait := defaultCooldown
+			if e == nil && seconds >= 0 {
+				// Clamp before multiplication to avoid overflow; never shorten a valid wait.
+				wait = maxCooldown
+				if uint64(seconds) <= uint64(maxCooldown/time.Second) {
+					wait = time.Duration(seconds) * time.Second
+				}
+			}
+			c.coolUntil(wait)
+			if retries >= 3 {
 				return nil, errRateLimited
 			}
 			retries++
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(time.Duration(wait) * time.Second):
-			}
 			continue
-		}
-		if res.StatusCode == 429 {
-			res.Body.Close()
-			return nil, errRateLimited
 		}
 		if file && res.StatusCode >= 300 && res.StatusCode < 400 {
 			res.Body.Close()
@@ -161,6 +211,188 @@ func (c *Client) Download(ctx context.Context, rawURL string) ([]byte, error) {
 type Session struct {
 	client         *Client
 	team, appToken string
+	live           liveState
+	// triggers are the configured reaction names (tone suffixes folded) used
+	// to decide which realtime reaction events are worth a thread-root lookup.
+	triggers map[string]bool
+	roots    rootCache
+}
+
+// rootCache maps a reacted message to its thread root, bounded in size.
+type rootCache struct {
+	mu sync.Mutex
+	m  map[string]string
+}
+
+const maxRootCache = 4096
+
+func (c *rootCache) get(k string) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.m[k]
+	return v, ok
+}
+func (c *rootCache) put(k, v string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil || len(c.m) >= maxRootCache {
+		c.m = map[string]string{}
+	}
+	c.m[k] = v
+}
+
+// skinTone matches Slack's tone-modified reaction names, e.g. "+1::skin-tone-3".
+var skinTone = regexp.MustCompile(`^(.+)::skin-tone-[2-6]$`)
+
+// baseReaction strips a skin-tone suffix.
+func baseReaction(name string) string {
+	if m := skinTone.FindStringSubmatch(name); m != nil {
+		return m[1]
+	}
+	return name
+}
+
+// foldTones adds, for every tone-modified reaction, its base name carrying the
+// combined users and counts, so a configured "+1" matches any tone while a
+// configured "+1::skin-tone-3" still matches only that tone.
+func foldTones(reactions []pluginapi.Reaction) []pluginapi.Reaction {
+	index := map[string]int{}
+	for i, r := range reactions {
+		index[r.Name] = i
+	}
+	out := append([]pluginapi.Reaction{}, reactions...)
+	type agg struct {
+		users []string
+		seen  map[string]bool
+		extra int
+	}
+	folded := map[string]*agg{}
+	order := []string{}
+	add := func(base string, r pluginapi.Reaction) {
+		a := folded[base]
+		if a == nil {
+			a = &agg{seen: map[string]bool{}}
+			folded[base] = a
+			order = append(order, base)
+		}
+		for _, u := range r.Users {
+			if !a.seen[u] {
+				a.seen[u] = true
+				a.users = append(a.users, u)
+			}
+		}
+		a.extra += max(0, r.Count-len(r.Users))
+	}
+	for _, r := range reactions {
+		if base := baseReaction(r.Name); base != r.Name {
+			if _, ok := folded[base]; !ok {
+				if i, has := index[base]; has {
+					add(base, reactions[i])
+				}
+			}
+			add(base, r)
+		}
+	}
+	for _, base := range order {
+		a := folded[base]
+		merged := pluginapi.Reaction{Name: base, Users: a.users, Count: len(a.users) + a.extra}
+		if i, has := index[base]; has {
+			out[i] = merged
+		} else {
+			out = append(out, merged)
+		}
+	}
+	return out
+}
+
+// liveState is the Socket Mode connection status shown by diagnostics.
+type liveState struct {
+	mu        sync.Mutex
+	connected bool
+	detail    string
+}
+
+func (l *liveState) set(connected bool, detail string) {
+	l.mu.Lock()
+	l.connected, l.detail = connected, detail
+	l.mu.Unlock()
+}
+func (s *Session) RealtimeStatus() (bool, string) {
+	if s.appToken == "" {
+		return false, "No app-level token is configured."
+	}
+	s.live.mu.Lock()
+	defer s.live.mu.Unlock()
+	if !s.live.connected && s.live.detail == "" {
+		return false, "Socket Mode is connecting."
+	}
+	return s.live.connected, s.live.detail
+}
+
+// InspectChannels reports names and bot membership for diagnostics.
+func (s *Session) InspectChannels(ctx context.Context, ids []string) ([]pluginapi.ChannelStatus, error) {
+	out := []pluginapi.ChannelStatus{}
+	for _, cid := range ids {
+		if !id(cid, "channel") {
+			continue
+		}
+		st := pluginapi.ChannelStatus{ID: cid}
+		doc, e := s.client.Call(ctx, "conversations.info", url.Values{"channel": {cid}})
+		var api apiError
+		switch {
+		case errors.As(e, &api) && api.code == "channel_not_found":
+			st.Problem = "channel not found or private without the bot: invite @ChatKeeper with /invite @ChatKeeper"
+		case e != nil:
+			st.Problem = "could not read channel details: " + e.Error()
+		default:
+			ch, _ := doc["channel"].(map[string]any)
+			st.Name = str(ch["name"])
+			st.Member = ch["is_member"] == true
+			if ch["is_archived"] == true {
+				st.Problem = "channel is archived"
+			}
+		}
+		out = append(out, st)
+		if len(out) >= 200 {
+			break
+		}
+	}
+	return out, nil
+}
+
+// ReplyReactions lists trigger reactions placed on replies rather than roots.
+func (s *Session) ReplyReactions(ctx context.Context, roots []pluginapi.RootRef, names []string) ([]pluginapi.ReplyReaction, error) {
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
+	out := []pluginapi.ReplyReaction{}
+	for _, root := range roots {
+		if !id(root.Channel, "channel") || !id(root.RootTS, "ts") {
+			continue
+		}
+		doc, e := s.client.Call(ctx, "conversations.replies", url.Values{"channel": {root.Channel}, "ts": {root.RootTS}, "limit": {"200"}})
+		if e != nil {
+			return out, nil
+		}
+		entries, _ := doc["messages"].([]any)
+		for _, raw := range entries {
+			m, ok := raw.(map[string]any)
+			if !ok || str(m["ts"]) == root.RootTS {
+				continue
+			}
+			reply, e := normalizeRoot(map[string]any{"ts": "0.0", "reactions": m["reactions"]})
+			if e != nil {
+				continue
+			}
+			for _, r := range foldTones(reply.Reactions) {
+				if want[r.Name] {
+					out = append(out, pluginapi.ReplyReaction{Channel: root.Channel, RootTS: root.RootTS, TS: str(m["ts"]), Name: r.Name})
+				}
+			}
+		}
+	}
+	return out, nil
 }
 
 func (s *Session) Capabilities() pluginapi.Capabilities {
@@ -318,7 +550,8 @@ func (s *Session) History(ctx context.Context, channel, oldest string) ([]plugin
 		if e != nil {
 			return nil, e
 		}
-		out = append(out, pluginapi.RootRef{Channel: channel, RootTS: ts, Reactions: root.Reactions})
+		replies, _ := integer(m["reply_count"])
+		out = append(out, pluginapi.RootRef{Channel: channel, RootTS: ts, Reactions: foldTones(root.Reactions), Replies: int(replies)})
 	}
 	return out, nil
 }
@@ -338,7 +571,65 @@ func (s *Session) Root(ctx context.Context, channel, ts string) (pluginapi.Root,
 	if !ok || doc["type"] != "message" || doc["channel"] != channel || m["ts"] != ts {
 		return pluginapi.Root{}, pluginapi.ErrInvalid
 	}
-	return normalizeRoot(m)
+	root, e := normalizeRoot(m)
+	root.Reactions = foldTones(root.Reactions)
+	return root, e
+}
+
+// Item re-reads the reactions on a reply and verifies it belongs to rootTS.
+func (s *Session) Item(ctx context.Context, channel, rootTS, ts string) (pluginapi.Root, error) {
+	if !id(channel, "channel") || !id(rootTS, "ts") || !id(ts, "ts") {
+		return pluginapi.Root{}, pluginapi.ErrInvalid
+	}
+	doc, e := s.client.Call(ctx, "reactions.get", url.Values{"channel": {channel}, "timestamp": {ts}, "full": {"true"}})
+	if e != nil {
+		var api apiError
+		if errors.As(e, &api) && api.code == "message_not_found" {
+			return pluginapi.Root{}, nil
+		}
+		return pluginapi.Root{}, e
+	}
+	m, ok := doc["message"].(map[string]any)
+	if !ok || doc["type"] != "message" || doc["channel"] != channel || m["ts"] != ts {
+		return pluginapi.Root{}, pluginapi.ErrInvalid
+	}
+	if m["thread_ts"] != rootTS {
+		return pluginapi.Root{}, nil
+	}
+	item, e := normalizeRoot(map[string]any{"ts": ts, "reactions": m["reactions"]})
+	if e != nil {
+		return pluginapi.Root{}, e
+	}
+	return pluginapi.Root{TS: ts, ThreadTS: rootTS, Reactions: foldTones(item.Reactions)}, nil
+}
+
+// threadRoot resolves the thread root of a reacted message with one bounded
+// conversations.replies read, cached per message.
+func (s *Session) threadRoot(ctx context.Context, channel, ts string) (string, error) {
+	key := channel + "/" + ts
+	if root, ok := s.roots.get(key); ok {
+		return root, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	doc, e := s.client.Call(ctx, "conversations.replies", url.Values{"channel": {channel}, "ts": {ts}, "limit": {"1"}})
+	if e != nil {
+		return "", e
+	}
+	entries, _ := doc["messages"].([]any)
+	if len(entries) == 0 {
+		return "", pluginapi.ErrInvalid
+	}
+	first, _ := entries[0].(map[string]any)
+	root := str(first["thread_ts"])
+	if root == "" {
+		root = str(first["ts"])
+	}
+	if !id(root, "ts") {
+		return "", pluginapi.ErrInvalid
+	}
+	s.roots.put(key, root)
+	return root, nil
 }
 func normalizeRoot(m map[string]any) (pluginapi.Root, error) {
 	ts := str(m["ts"])

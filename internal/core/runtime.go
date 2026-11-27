@@ -9,6 +9,7 @@ import (
 	"github.com/bitskyai/chatkeeper/internal/storage"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 )
@@ -17,6 +18,7 @@ type Health struct {
 	State, ErrorClass string
 	LastCapture       time.Time
 	Realtime          bool
+	RealtimeConnected bool
 }
 type Runtime struct {
 	OnCapture                         func(pluginapi.Key)
@@ -33,6 +35,10 @@ type Runtime struct {
 	active                            map[string]bool
 	watermarks                        map[string]time.Time
 	lastFull                          time.Time
+	lastPoll                          time.Time
+	checks                            chan checkRequest
+	activity                          []Activity
+	realtimeUp                        bool
 }
 
 func New(ws pluginapi.Workspace, p pluginapi.Plugin, env pluginapi.Env, store storage.Store) *Runtime {
@@ -42,7 +48,7 @@ func New(ws pluginapi.Workspace, p pluginapi.Plugin, env pluginapi.Env, store st
 	}
 	env.Credentials = scoped
 	env.Log = pluginapi.RedactingLogger(env.Log, scoped)
-	return &Runtime{Workspace: ws, Plugin: p, Env: env, Store: store, Queue: NewQueue(1024), HookTimeout: 30 * time.Second, StopTimeout: 10 * time.Second, Backoff: 5 * time.Second, marked: map[pluginapi.Key]bool{}, active: map[string]bool{}, watermarks: map[string]time.Time{}}
+	return &Runtime{Workspace: ws, Plugin: p, Env: env, Store: store, Queue: NewQueue(1024), HookTimeout: 30 * time.Second, StopTimeout: 10 * time.Second, Backoff: 5 * time.Second, marked: map[pluginapi.Key]bool{}, active: map[string]bool{}, watermarks: map[string]time.Time{}, checks: make(chan checkRequest)}
 }
 func (r *Runtime) Health() Health { r.mu.RLock(); defer r.mu.RUnlock(); return r.health }
 func (r *Runtime) state(state, class string) {
@@ -68,6 +74,28 @@ func (r *Runtime) now() time.Time {
 	return time.Now()
 }
 func (r *Runtime) Refresh(ctx context.Context, s pluginapi.Session, k pluginapi.Key) (bool, error) {
+	return r.refresh(ctx, s, k, "")
+}
+
+// triggered applies the rule to the root and, for a realtime reaction on a
+// reply (item), to that reply as re-read from the source. Polling passes no
+// item, so it only ever matches reactions on the root.
+func (r *Runtime) triggered(ctx context.Context, s pluginapi.Session, k pluginapi.Key, item string, root pluginapi.Root) (bool, error) {
+	matched, e := Matches(r.Workspace.Trigger, root)
+	if e != nil || matched || item == "" || item == k.RootTS {
+		return matched, e
+	}
+	reader, ok := s.(pluginapi.ItemReader)
+	if !ok {
+		return false, nil
+	}
+	reply, e := Call(ctx, r.HookTimeout, func(c context.Context) (pluginapi.Root, error) { return reader.Item(c, k.Channel, k.RootTS, item) })
+	if e != nil || reply.TS != item {
+		return false, e
+	}
+	return Matches(r.Workspace.Trigger, pluginapi.Root{TS: k.RootTS, Reactions: reply.Reactions})
+}
+func (r *Runtime) refresh(ctx context.Context, s pluginapi.Session, k pluginapi.Key, item string) (bool, error) {
 	root, e := Call(ctx, r.HookTimeout, func(c context.Context) (pluginapi.Root, error) { return s.Root(c, k.Channel, k.RootTS) })
 	if e != nil {
 		return false, e
@@ -79,7 +107,7 @@ func (r *Runtime) Refresh(ctx context.Context, s pluginapi.Session, k pluginapi.
 	if root.TS == "" {
 		return r.observeMissing(ctx, k, previous)
 	}
-	matched, e := Matches(r.Workspace.Trigger, root)
+	matched, e := r.triggered(ctx, s, k, item, root)
 	if e != nil {
 		return false, e
 	}
@@ -102,7 +130,7 @@ func (r *Runtime) Refresh(ctx context.Context, s pluginapi.Session, k pluginapi.
 	if root.TS == "" {
 		return r.observeMissing(ctx, k, previous)
 	}
-	matched, e = Matches(r.Workspace.Trigger, root)
+	matched, e = r.triggered(ctx, s, k, item, root)
 	if e != nil {
 		return false, e
 	}
@@ -130,11 +158,21 @@ func (r *Runtime) Refresh(ctx context.Context, s pluginapi.Session, k pluginapi.
 			logger = slog.Default()
 		}
 		logger.Info("thread archived", "workspace", r.Workspace.ID, "channel", k.Channel, "root", k.RootTS)
+		r.record("archive", "Archived thread "+k.Channel+" / "+k.RootTS)
 	}
 	return changed, nil
 }
 func fatal(e error) bool { return errors.Is(e, ErrPanic) || errors.Is(e, ErrTimeout) }
 func (r *Runtime) Backfill(ctx context.Context, s pluginapi.Session) (int, error) {
+	return r.backfill(ctx, s, nil)
+}
+
+// RecentWindow bounds incremental polls. A reaction can be added to a root of any
+// age, and history reads filter by post time, so each poll rescans roots posted in
+// this window; older roots are rescanned by the hourly full pass or Check now.
+const RecentWindow = 24 * time.Hour
+
+func (r *Runtime) backfill(ctx context.Context, s pluginapi.Session, trace *CheckReport) (int, error) {
 	caps, e := Call(ctx, r.HookTimeout, func(context.Context) (pluginapi.Capabilities, error) { return s.Capabilities(), nil })
 	if e != nil {
 		return 0, e
@@ -162,16 +200,33 @@ func (r *Runtime) Backfill(ctx context.Context, s pluginapi.Session) (int, error
 	}
 	now := r.now()
 	repairKeys, repairGeneration := r.Queue.Repairs()
-	full := repairGeneration > 0 || r.lastFull.IsZero() || now.Sub(r.lastFull) >= time.Hour
+	full := trace != nil || repairGeneration > 0 || r.lastFull.IsZero() || now.Sub(r.lastFull) >= time.Hour
 	changed := 0
 	var lastErr error
+	channels := make([]string, 0, len(r.active))
 	for channel := range r.active {
+		channels = append(channels, channel)
+	}
+	sort.Strings(channels)
+	if trace != nil {
+		trace.Full = full
+		r.inspectChannels(ctx, s, channels, trace)
+	}
+	scanned, candidates := 0, 0
+	for _, channel := range channels {
 		if err := ctx.Err(); err != nil {
 			return changed, err
+		}
+		var report *ChannelCheck
+		if trace != nil {
+			report = trace.channel(channel)
 		}
 		oldest := ""
 		if !full {
 			water := r.watermarks[channel].Add(-5 * time.Minute)
+			if recent := now.Add(-RecentWindow); recent.Before(water) {
+				water = recent
+			}
 			if water.Unix() > 0 {
 				oldest = fmt.Sprintf("%d.%06d", water.Unix(), water.Nanosecond()/1000)
 			}
@@ -182,8 +237,15 @@ func (r *Runtime) Backfill(ctx context.Context, s pluginapi.Session) (int, error
 		}
 		if e != nil {
 			lastErr = e
+			if report != nil {
+				report.Error = e.Error()
+			}
 		} else {
 			r.watermarks[channel] = now
+		}
+		scanned += len(roots)
+		if report != nil {
+			report.Scanned = len(roots)
 		}
 		set := map[pluginapi.Key]bool{}
 		for _, k := range roots {
@@ -195,6 +257,9 @@ func (r *Runtime) Backfill(ctx context.Context, s pluginapi.Session) (int, error
 				rule := r.Workspace.Trigger
 				rule.Who = "any"
 				matched, matchErr := Matches(rule, pluginapi.Root{TS: k.RootTS, Reactions: k.Reactions})
+				if report != nil && len(k.Reactions) > 0 {
+					report.addRoot(k, matched)
+				}
 				if matchErr != nil {
 					lastErr = matchErr
 					continue
@@ -204,7 +269,11 @@ func (r *Runtime) Backfill(ctx context.Context, s pluginapi.Session) (int, error
 				}
 			}
 		}
-		for _, k := range append(keys, repairKeys...) {
+		if trace != nil {
+			r.inspectReplies(ctx, s, roots, trace)
+		}
+		candidates += len(set)
+		for _, k := range keys {
 			if err := ctx.Err(); err != nil {
 				return changed, err
 			}
@@ -212,11 +281,35 @@ func (r *Runtime) Backfill(ctx context.Context, s pluginapi.Session) (int, error
 				set[k] = true
 			}
 		}
+		// Overflow repair must re-read reply authority too: history only carries root reactions.
+		for _, event := range repairKeys {
+			if event.Channel != channel || event.ItemTS == "" {
+				continue
+			}
+			k := pluginapi.Key{Channel: event.Channel, RootTS: event.RootTS}
+			ok, err := r.refresh(ctx, s, k, event.ItemTS)
+			if fatal(err) {
+				return changed, err
+			}
+			if err != nil {
+				lastErr = err
+			} else if ok {
+				changed++
+			}
+		}
+		for _, event := range repairKeys {
+			if event.Channel == channel && event.ItemTS == "" {
+				set[pluginapi.Key{Channel: event.Channel, RootTS: event.RootTS}] = true
+			}
+		}
 		for k := range set {
 			if err := ctx.Err(); err != nil {
 				return changed, err
 			}
 			ok, e := r.Refresh(ctx, s, k)
+			if report != nil {
+				report.result(k.RootTS, ok, r.marked[k], e)
+			}
 			if fatal(e) {
 				return changed, e
 			}
@@ -232,6 +325,14 @@ func (r *Runtime) Backfill(ctx context.Context, s pluginapi.Session) (int, error
 	if err := ctx.Err(); err != nil {
 		return changed, err
 	}
+	r.mu.Lock()
+	r.lastPoll = now
+	r.mu.Unlock()
+	summary := fmt.Sprintf("Checked %d channels, %d thread roots, %d matched, %d archived or updated", len(channels), scanned, candidates, changed)
+	if lastErr != nil {
+		summary += "; some reads failed: " + lastErr.Error()
+	}
+	r.record("poll", summary)
 	if full && lastErr == nil {
 		r.lastFull = now
 	}
@@ -346,8 +447,16 @@ func (r *Runtime) runOnce(ctx context.Context) error {
 				e = ErrPlugin
 			}
 			return e
+		case req := <-r.checks:
+			report, e := r.check(child, s, req)
+			req.done <- report
+			if fatal(e) {
+				return e
+			}
+			continue
 		default:
 		}
+		r.observeRealtime(s)
 		popCtx, popCancel := context.WithTimeout(child, 100*time.Millisecond)
 		event, e := r.Queue.Pop(popCtx)
 		popCancel()
@@ -364,7 +473,7 @@ func (r *Runtime) runOnce(ctx context.Context) error {
 			if !r.active[key.Channel] || event.Kind != "reaction" && !r.marked[key] {
 				continue
 			}
-			_, e = r.Refresh(child, s, key)
+			_, e = r.refresh(child, s, key, event.ItemTS)
 		}
 		if fatal(e) {
 			return e

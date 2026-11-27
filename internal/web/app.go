@@ -18,6 +18,7 @@ import (
 	"html/template"
 	"maps"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -58,25 +59,33 @@ type App struct {
 	existingConfig   bool
 	protocol         http.Handler
 	wizards          map[string]*wizard
+	reportMu         sync.Mutex
+	reports          map[string]*core.CheckReport
 }
 type wizard struct {
 	mu          sync.Mutex
 	Platform    string
 	Step        int
 	Data        pluginapi.SetupState
+	Inputs      map[string]json.RawMessage
 	Credentials pluginapi.Credentials
 	References  map[string]string
 	Workspace   string
 	Messages    []string
+	Checks      []pluginapi.Check
+	Report      *core.CheckReport
 	Started     time.Time
 }
 type field struct {
 	Name, Title, Type, Value, Description, Widget string
-	Provided                                      bool
+	Provided, Saved                               bool
 	Required, Multiple, Checked                   bool
 	Pattern, Minimum, Maximum, Step               string
 	Options                                       []pluginapi.Choice
 	Examples                                      []string
+	Selected                                      map[string]bool
+	Groups                                        []optionGroup
+	Other                                         string
 }
 type card struct {
 	ID, Name string
@@ -86,10 +95,17 @@ type workspaceRow struct {
 	ID, State, Error, Transport, LastCapture string
 	Paused                                   bool
 	Fields                                   []field
+	Activity                                 []core.Activity
+	Report                                   *core.CheckReport
 }
 type page struct {
 	Title, Kind, Body, CSRF, Error, Storage, Workspace, Reaction string
-	Step                                                         int
+	Step, Steps                                                  int
+	CanBack, CanTest, Tested, Locked, Live                       bool
+	Skip, ImageOrigins, Transport                                string
+	Checks                                                       []pluginapi.Check
+	Report                                                       *core.CheckReport
+	Activity                                                     []core.Activity
 	Messages                                                     []string
 	Links                                                        []pluginapi.Link
 	Fields                                                       []field
@@ -135,7 +151,7 @@ func NewApp(o Options) (*App, error) {
 		return nil, e
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &App{opts: o, db: db, ctx: ctx, cancel: cancel, launchToken: o.LaunchToken, attempts: map[string]attempts{}, wizards: map[string]*wizard{}}
+	a := &App{opts: o, db: db, ctx: ctx, cancel: cancel, launchToken: o.LaunchToken, attempts: map[string]attempts{}, wizards: map[string]*wizard{}, reports: map[string]*core.CheckReport{}}
 	if o.Mode == "desktop" {
 		_, _ = db.Exec("DELETE FROM sessions; DELETE FROM setup_sessions")
 	}
@@ -347,7 +363,7 @@ func (a *App) viewer(token string) *Viewer {
 	a.viewerMu.Unlock()
 	sources := map[string]Source{}
 	for _, r := range a.Manager.List() {
-		sources[r.Entry.Workspace.ID] = Source{Store: r.Store, Content: r.Entry.Plugin.Content(), path: r.Entry.Workspace.Storage}
+		sources[r.Entry.Workspace.ID] = Source{Store: r.Store, Content: r.Entry.Plugin.Content(), Triggers: r.Entry.Workspace.Trigger.Reactions, path: r.Entry.Workspace.Storage}
 	}
 	v := New(sources, token)
 	a.viewerMu.Lock()
@@ -387,6 +403,9 @@ func (a *App) serveViewer(w http.ResponseWriter, r *http.Request, token string) 
 	v.serveHTTP(w, r, sources)
 }
 func (a *App) render(w http.ResponseWriter, p page) {
+	if p.ImageOrigins != "" {
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' "+p.ImageOrigins+"; script-src 'self'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+	}
 	if a.opts.Dev {
 		t, e := template.ParseFiles("internal/web/templates/admin.html")
 		if e == nil {
@@ -609,57 +628,149 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request, id, csrf string) {
 		return
 	}
 	steps := p.SetupFlow()
-	runStep := func(step pluginapi.SetupStep, input json.RawMessage) (pluginapi.StepResult, error) {
+	runHook := func(hook func(context.Context, pluginapi.SetupState, json.RawMessage, pluginapi.Env) (pluginapi.StepResult, error), input json.RawMessage) (pluginapi.StepResult, error) {
 		// A timed-out, noncooperative plugin must not retain mutable wizard maps.
 		state := pluginapi.SetupState{}
 		for k, v := range z.Data {
 			state[k] = append(json.RawMessage(nil), v...)
 		}
 		env := pluginapi.Env{Credentials: maps.Clone(z.Credentials), HTTP: a.opts.HTTP}
-		return core.Call(r.Context(), 30*time.Second, func(ctx context.Context) (pluginapi.StepResult, error) { return step.Run(ctx, state, input, env) })
+		return core.Call(r.Context(), 30*time.Second, func(ctx context.Context) (pluginapi.StepResult, error) { return hook(ctx, state, input, env) })
+	}
+	if r.URL.Path == "/setup/back" && r.Method == "POST" {
+		// Back keeps entered values and server-side secrets; it only moves the cursor.
+		if z.Step > 0 && z.Step <= len(steps)+1 {
+			z.Step--
+		}
+		z.Messages, z.Checks = nil, nil
+		a.persist(id, z)
+		http.Redirect(w, r, "/setup/step", http.StatusSeeOther)
+		return
+	}
+	if r.URL.Path == "/setup/check" && r.Method == "POST" && z.Step > len(steps) {
+		a.checkNow(r.Context(), z)
+		http.Redirect(w, r, "/setup/step", http.StatusSeeOther)
+		return
+	}
+	if r.URL.Path == "/setup/finish" && r.Method == "POST" {
+		a.mu.Lock()
+		if a.wizards[id] == z {
+			delete(a.wizards, id)
+		}
+		a.mu.Unlock()
+		_, _ = a.db.Exec("DELETE FROM setup_sessions WHERE id=?", id)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	if r.URL.Path != "/setup/step" {
+		http.NotFound(w, r)
+		return
 	}
 	if z.Step < len(steps) {
 		step := steps[z.Step]
 		result := pluginapi.StepResult{OK: true}
 		var e error
+		tested := false
 		if r.Method == "POST" {
 			input, creds := formInput(r, step.Schema)
+			action := r.FormValue("action")
 			for k, v := range creds {
-				if z.References[k] == "" {
+				// A blank secret keeps the saved value; the skip action clears it.
+				if z.References[k] == "" && v != "" {
 					z.Credentials[k] = v
 				}
 			}
-			if step.Run != nil {
-				result, e = runStep(step, input)
+			if z.Inputs == nil {
+				z.Inputs = map[string]json.RawMessage{}
 			}
-			if e == nil && result.OK {
+			z.Inputs[step.ID] = input
+			switch {
+			case action == "skip" && step.Skip != "":
+				for k := range creds {
+					if z.References[k] == "" {
+						delete(z.Credentials, k)
+					}
+				}
+				z.Step++
+				z.Messages, z.Checks = nil, nil
+				if step.SkipNote != "" {
+					z.Messages = []string{step.SkipNote}
+				}
+				a.persist(id, z)
+				http.Redirect(w, r, "/setup/step", http.StatusSeeOther)
+				return
+			case action == "test" && step.Test != nil:
+				tested = true
+				result, e = runHook(step.Test, input)
+			case step.Run != nil:
+				result, e = runHook(step.Run, input)
+			}
+			if !tested && e == nil && result.OK {
 				e = z.merge(result.Data)
 				if e == nil {
 					z.Step++
 					z.Messages = result.Messages
+					z.Checks = result.Checks
 					a.persist(id, z)
 					http.Redirect(w, r, "/setup/step", http.StatusSeeOther)
 					return
 				}
 			}
 		}
-		if r.Method == "GET" && step.Kind == "choose" && step.Run != nil {
-			result, e = runStep(step, nil)
+		var prepared pluginapi.StepResult
+		var prepareErr error
+		if step.Prepare != nil {
+			prepared, prepareErr = core.Call(r.Context(), 30*time.Second, func(ctx context.Context) (pluginapi.StepResult, error) {
+				state := pluginapi.SetupState{}
+				for k, v := range z.Data {
+					state[k] = append(json.RawMessage(nil), v...)
+				}
+				return step.Prepare(ctx, state, pluginapi.Env{Credentials: maps.Clone(z.Credentials), HTTP: a.opts.HTTP})
+			})
+		} else if r.Method == "GET" && step.Kind == "choose" && step.Run != nil {
+			prepared, prepareErr = runHook(step.Run, nil)
 		}
-		pg := page{Title: step.Title, Kind: "step", Body: step.Body, CSRF: csrf, Step: z.Step + 1, Links: step.Links, Fields: schemaFields(step.Schema), Messages: append(append([]string{}, z.Messages...), result.Messages...)}
+		if e == nil {
+			e = prepareErr
+		}
+		pg := page{Title: step.Title, Kind: "step", Body: step.Body, CSRF: csrf, Step: z.Step + 1, Steps: len(steps) + 2, Links: append(append([]pluginapi.Link{}, step.Links...), prepared.Links...), Fields: schemaFields(step.Schema), CanBack: z.Step > 0, Skip: step.Skip, CanTest: step.Test != nil}
+		if r.Method == "GET" {
+			pg.Messages = append(pg.Messages, z.Messages...)
+			pg.Checks = z.Checks
+		}
+		pg.Messages = append(pg.Messages, prepared.Messages...)
+		pg.Messages = append(pg.Messages, result.Messages...)
+		if r.Method == "POST" {
+			pg.Checks = result.Checks
+			pg.Tested = tested
+		}
 		if e != nil {
 			pg.Error = "Connection check failed. Please retry."
 		}
 		for k, msg := range result.FieldErrors {
 			pg.Messages = append(pg.Messages, k+": "+msg)
 		}
+		choices := result.Choices
+		if len(choices) == 0 {
+			choices = prepared.Choices
+		}
+		var saved map[string]any
+		_ = json.Unmarshal(z.Inputs[step.ID], &saved)
 		for i := range pg.Fields {
-			if z.References[pg.Fields[i].Name] != "" {
-				pg.Fields[i].Provided = true
-				pg.Fields[i].Description = "Provided by environment"
+			f := &pg.Fields[i]
+			if z.References[f.Name] != "" {
+				f.Provided = true
+				f.Description = "Provided by environment"
+			} else if f.Type == "password" && z.Credentials[f.Name] != "" {
+				f.Saved = true
 			}
-			if pg.Fields[i].Widget == "channel-picker" {
-				pg.Fields[i].Options = result.Choices
+			if f.Widget == "channel-picker" || f.Widget == "reaction-picker" {
+				f.Options = choices
+			}
+			prefill(f, saved)
+			if f.Widget == "reaction-picker" {
+				pickerGroups(f)
+				pg.ImageOrigins = imageOrigins(f.Options)
 			}
 		}
 		a.redactPage(&pg, z.Credentials)
@@ -672,10 +783,114 @@ func (a *App) setup(w http.ResponseWriter, r *http.Request, id, csrf string) {
 	}
 	a.live(w, r, csrf, z)
 }
+
+// prefill restores a step's previous non-secret input after Back or a failed check.
+func prefill(f *field, saved map[string]any) {
+	f.Selected = map[string]bool{}
+	value, has := saved[f.Name]
+	if !has {
+		if f.Multiple {
+			for _, v := range strings.Split(f.Value, "\n") {
+				if v != "" {
+					f.Selected[v] = true
+				}
+			}
+		}
+		return
+	}
+	switch v := value.(type) {
+	case []any:
+		lines := []string{}
+		for _, x := range v {
+			s := fmt.Sprint(x)
+			f.Selected[s] = true
+			lines = append(lines, s)
+		}
+		f.Value = strings.Join(lines, "\n")
+	case bool:
+		f.Checked = v
+	case float64:
+		f.Value = strconv.FormatFloat(v, 'f', -1, 64)
+	case string:
+		if f.Type != "password" {
+			f.Value = v
+		}
+	}
+}
+
+type optionGroup struct {
+	Name, Glyph string
+	Options     []pluginapi.Choice
+}
+
+// pickerGroups groups picker options by category and moves typed names that are
+// not listed into the free-text value.
+func pickerGroups(f *field) {
+	index := map[string]int{}
+	known := map[string]bool{}
+	for _, o := range f.Options {
+		known[o.ID] = true
+		name := o.Group
+		if name == "" {
+			name = "Other"
+		}
+		i, ok := index[name]
+		if !ok {
+			i = len(f.Groups)
+			index[name] = i
+			glyph := o.Glyph
+			if o.Image != "" || name == "Custom" {
+				glyph = "★"
+			}
+			f.Groups = append(f.Groups, optionGroup{Name: name, Glyph: glyph})
+		}
+		f.Groups[i].Options = append(f.Groups[i].Options, o)
+	}
+	// Free-text entries may hold several comma separated names.
+	other := []string{}
+	f.Selected = map[string]bool{}
+	for _, name := range strings.FieldsFunc(f.Value, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\r' || r == '\t' }) {
+		name = strings.Trim(name, ":")
+		if name == "" || f.Selected[name] {
+			continue
+		}
+		f.Selected[name] = true
+		if !known[name] {
+			other = append(other, name)
+		}
+	}
+	f.Other = strings.Join(other, ", ")
+}
+
+// imageOrigins allows only HTTPS image origins named by the plugin's choices.
+func imageOrigins(choices []pluginapi.Choice) string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, c := range choices {
+		if c.Image == "" {
+			continue
+		}
+		u, e := url.Parse(c.Image)
+		if e != nil || u.Scheme != "https" || u.User != nil || u.Host == "" || strings.ContainsAny(u.Host, " ;'\"") {
+			continue
+		}
+		origin := "https://" + u.Host
+		if !seen[origin] {
+			seen[origin] = true
+			out = append(out, origin)
+		}
+	}
+	return strings.Join(out, " ")
+}
 func (a *App) redactPage(p *page, creds pluginapi.Credentials) {
 	for _, secret := range creds {
 		if secret == "" {
 			continue
+		}
+		// Diagnostics contain source-supplied workspace and user labels too.
+		for i := range p.Checks {
+			p.Checks[i].Label = strings.ReplaceAll(p.Checks[i].Label, secret, "[redacted]")
+			p.Checks[i].Detail = strings.ReplaceAll(p.Checks[i].Detail, secret, "[redacted]")
 		}
 		p.Body = strings.ReplaceAll(p.Body, secret, "[redacted]")
 		p.Error = strings.ReplaceAll(p.Error, secret, "[redacted]")
@@ -715,6 +930,12 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 	if wid == "" {
 		wid = "workspace"
 	}
+	// Once this wizard has saved a workspace its name is fixed: a different
+	// name after Back would save a second workspace with the same credentials.
+	locked := z.Workspace != ""
+	if locked {
+		wid = z.Workspace
+	}
 	root := filepath.Join(a.opts.Home, "data")
 	if a.opts.Mode == "desktop" {
 		if home, e := os.UserHomeDir(); e == nil {
@@ -725,11 +946,18 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 	if storagePath == "" {
 		storagePath = filepath.Join(root, wid)
 	}
-	pg := page{Title: "Where should we save your threads?", Kind: "storage", CSRF: csrf, Storage: storagePath, Workspace: wid, Managed: !config.Writable(a.opts.Config)}
+	if r.Method == "GET" && locked {
+		for _, running := range a.Manager.List() {
+			if running.Entry.Workspace.ID == z.Workspace {
+				wid, storagePath = z.Workspace, running.Entry.Workspace.Storage
+			}
+		}
+	}
+	pg := page{Title: "Where should we save your threads?", Kind: "storage", CSRF: csrf, Storage: storagePath, Workspace: wid, Managed: !config.Writable(a.opts.Config), CanBack: true, Locked: locked}
 	if r.Method == "POST" {
 		exists := false
 		for _, running := range a.Manager.List() {
-			if running.Entry.Workspace.ID == wid {
+			if running.Entry.Workspace.ID == wid && wid != z.Workspace {
 				exists = true
 			}
 		}
@@ -763,17 +991,37 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 					pg.Error = "Configuration is managed. Apply this workspace in your YAML configuration; credentials must be supplied separately."
 				} else {
 					var e error
+					known := map[string]bool{}
+					for _, f := range schemaFields(p.CredentialSchema()) {
+						known[f.Name] = true
+					}
 					for k, v := range z.Credentials {
-						if v != "" && z.References[k] == "" {
-							name, ok := entry[k+"_env"].(string)
-							if !ok || name == "" {
-								e = errors.New("missing credential reference")
-								break
+						if v != "" && !known[k] {
+							e = errors.New("unknown credential")
+						}
+					}
+					for _, f := range schemaFields(p.CredentialSchema()) {
+						if e != nil {
+							break
+						}
+						k := f.Name
+						if z.References[k] != "" {
+							continue
+						}
+						name, ok := entry[k+"_env"].(string)
+						if !ok || name == "" {
+							e = errors.New("missing credential reference")
+							break
+						}
+						v := z.Credentials[k]
+						if v == "" {
+							// A skipped optional token clears any value saved earlier in this wizard.
+							if old, _, _ := a.Secrets.Get(name); old == "" {
+								continue
 							}
-							e = a.Secrets.Set(name, v)
-							if e != nil {
-								break
-							}
+						}
+						if e = a.Secrets.Set(name, v); e != nil {
+							break
 						}
 					}
 					if e == nil {
@@ -785,8 +1033,10 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 					if e != nil {
 						pg.Error = "Could not save workspace. Check configuration, folder permissions and credential sources."
 					} else {
-						z.Credentials = nil
+						// Credentials stay in memory until Finish or expiry so Back can
+						// revisit earlier steps; they are never rendered.
 						z.Workspace = wid
+						z.Report = nil
 						z.Step++
 						z.Started = time.Now()
 						a.persist(id, z)
@@ -850,21 +1100,69 @@ func (a *App) live(w http.ResponseWriter, r *http.Request, csrf string, z *wizar
 	reaction := "your chosen reaction"
 	var trigger struct{ Reactions []string }
 	if json.Unmarshal(z.Data["trigger"], &trigger) == nil && len(trigger.Reactions) > 0 {
-		reaction = strings.Join(trigger.Reactions, ": and :")
+		reaction = strings.Join(trigger.Reactions, ": or :")
 	}
 	var eventCount int
 	_ = a.db.QueryRow("SELECT count(*) FROM events WHERE workspace=? AND at>=?", z.Workspace, z.Started.Unix()).Scan(&eventCount)
-	pg := page{Title: "Try your first archive", Kind: "live", CSRF: csrf, Workspace: z.Workspace, Reaction: reaction, Rows: a.archiveRows(z.Workspace)}
+	pg := page{Title: "Try your first archive", Kind: "live", CSRF: csrf, Workspace: z.Workspace, Reaction: reaction, Rows: a.archiveRows(z.Workspace), CanBack: true, Report: z.Report}
 	if eventCount == 0 {
 		pg.Rows = nil
 	}
 	if len(pg.Rows) > 0 {
 		pg.Title = "Your first thread is saved!"
 	}
-	if time.Since(z.Started) > 2*time.Minute {
-		pg.Messages = []string{"Still waiting? Invite the bot to the channel, check the reaction name and owner filter. Polling-only connections can take two minutes. You can finish now and test later."}
+	for _, running := range a.Manager.List() {
+		if running.Entry.Workspace.ID != z.Workspace {
+			continue
+		}
+		pg.Transport = transportLabel(running)
+		pg.Live = running.Runtime.Health().Realtime
+		pg.Activity = running.Runtime.Activity()
+		if len(pg.Activity) > 8 {
+			pg.Activity = pg.Activity[:8]
+		}
+	}
+	if time.Since(z.Started) > 2*time.Minute && len(pg.Rows) == 0 && z.Report == nil {
+		pg.Messages = []string{"Still waiting? Click Check now to see exactly what ChatKeeper sees in your channels. You can finish now and test later."}
 	}
 	a.render(w, pg)
+}
+
+// checkNow runs a diagnostic full scan for the wizard's workspace.
+func (a *App) checkNow(ctx context.Context, z *wizard) {
+	for _, running := range a.Manager.List() {
+		if running.Entry.Workspace.ID == z.Workspace {
+			ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+			report := running.Runtime.CheckNow(ctx)
+			cancel()
+			z.Report = &report
+			return
+		}
+	}
+	z.Report = &core.CheckReport{Workspace: z.Workspace, Error: "This workspace is not running. Check Settings for errors.", Hints: []string{"This workspace is not running. Check Settings for errors."}}
+}
+
+func transportLabel(running *app.Running) string {
+	health := running.Runtime.Health()
+	switch {
+	case running.Paused:
+		return "Paused"
+	case health.State == "starting" || health.State == "":
+		return "Starting…"
+	case health.Realtime && health.RealtimeConnected:
+		return "Live events connected · polling every " + pollInterval(running)
+	case health.Realtime:
+		return "Live events connecting · polling every " + pollInterval(running)
+	default:
+		return "Polling only · checks every " + pollInterval(running)
+	}
+}
+func pollInterval(running *app.Running) string {
+	d := running.Entry.Workspace.PollInterval
+	if d <= 0 {
+		d = 120 * time.Second
+	}
+	return d.String()
 }
 
 func (a *App) maintain() {
