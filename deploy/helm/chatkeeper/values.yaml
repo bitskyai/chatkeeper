@@ -21,3 +21,10 @@ resources:
     memory: 128Mi
   limits:
     memory: 1Gi
+# The CronJob and destructive apply each require an explicit opt-in.
+# The selected workspace must also have cleanup.enabled: true in config.yaml.
+cleanup:
+  enabled: false
+  apply: false
+  workspace: ""
+  schedule: "0 3 * * *"

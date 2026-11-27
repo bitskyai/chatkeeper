@@ -320,6 +320,8 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			a.dashboard(w, r, csrf, false)
 		}
+	case strings.HasPrefix(r.URL.Path, "/cleanup/"):
+		a.cleanupPage(w, r, id, csrf)
 	case strings.HasPrefix(r.URL.Path, "/setup/"):
 		a.setup(w, r, id, csrf)
 	case strings.HasPrefix(r.URL.Path, "/settings/"):

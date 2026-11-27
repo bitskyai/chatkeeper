@@ -213,3 +213,48 @@ create locks or recover an interrupted rename; use a copy for migration rehearsa
 Workspace removal keeps archives. See [CONTRIBUTING](CONTRIBUTING.md),
 [architecture](docs/design/architecture.md), [porting details](docs/porting.md),
 [launch checklist](docs/launch-checklist.md) and [MIT license](LICENSE).
+
+### Opt-in source cleanup
+
+Cleanup is off by default. It deletes source messages only after verifying the
+exact durable archive, a live identity, owner approval reaction and unchanged
+live content. Slack bot credentials can delete only their own messages. Deleting
+others requires a user admin/owner credential and explicit `allow_others: true`.
+
+Configure a workspace with `trigger.who: owner`, a nonempty `trigger.owners`
+list and its approval reactions, then add:
+
+```yaml
+cleanup:
+  enabled: true
+  token_env: CHATKEEPER_CLEANUP_TOKEN
+  min_age_hours: 24
+  allow_others: false
+```
+
+Set the referenced secret in the environment or credential store. Preview is
+offline and needs no credential:
+
+```sh
+chatkeeper cleanup --workspace example
+chatkeeper cleanup --workspace example --apply
+```
+
+The authenticated **Cleanup** page offers per-workspace enable, preview and
+apply. Apply requires typing the workspace id, a fresh unchanged preview, and
+administrator password re-entry in server mode. Each thread reports dry-run,
+deferred, deleted, refused, rate-limited or blocked; failures preserve the root
+and allow other threads to proceed. Pending outcomes require resume and live
+reconciliation; they are never assumed successful.
+
+Keep the `cleanup/` journals with your archive. Deletion timestamps are stored
+there as `source_deleted_at` metadata so original snapshot bytes and hashes stay
+unchanged. Refresh/backfill cannot shrink a cleaned archive. Snapshots with
+cleanup progress stay pinned; new activity on such roots requires manual
+reconciliation. Folder storage on systems with durable directory sync is
+supported; Windows apply and unsupported storage types fail closed.
+
+The Helm cleanup CronJob has separate `cleanup.enabled`, `cleanup.workspace`
+and `cleanup.apply` opt-ins; its default execution is a dry-run. The real Slack
+gate verified three created messages, three deletions, unchanged archived hashes,
+a no-op re-run, tamper refusal and retention through refresh/backfill.

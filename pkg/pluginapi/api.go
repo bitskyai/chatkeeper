@@ -42,7 +42,15 @@ type Trigger struct {
 	Who       string   `json:"who" yaml:"who"`
 	Owners    []string `json:"owners" yaml:"owners"`
 }
+type CleanupPolicy struct {
+	Enabled     bool
+	AllowOthers bool
+	OwnOnly     bool
+	MinAge      time.Duration
+	TokenEnv    string
+}
 type Workspace struct {
+	Cleanup               CleanupPolicy
 	ID, Platform, Storage string
 	Channels              []string
 	AutoChannels          bool
@@ -111,9 +119,11 @@ type ArchiveManifest struct {
 	Files        []Attachment      `json:"files"`
 }
 type Snapshot struct {
-	Manifest ArchiveManifest
-	Messages []Message
-	Users    map[string]Message
+	// SourceDeletedAt is a durable journal overlay; original object bytes remain immutable.
+	SourceDeletedAt map[string]string `json:"source_deleted_at,omitempty"`
+	Manifest        ArchiveManifest
+	Messages        []Message
+	Users           map[string]Message
 	// RawUsers retains optional malformed non-author metadata without rendering it.
 	RawUsers  map[string]any
 	Blobs     map[string]Blob
@@ -294,4 +304,19 @@ func schema(n map[string]any, item bool) error {
 		return schema(m, true)
 	}
 	return nil
+}
+
+// CleanupOffline checks platform policy without credentials or network access.
+type CleanupOffline interface {
+	CleanupReason(Workspace, Message) string
+}
+
+// CleanupStatus classifies safe mutation failures without leaking transport details.
+type CleanupError struct{ Status, Reason string }
+
+func (e *CleanupError) Error() string { return e.Reason }
+
+// CleanupBoundary validates source-specific workspace identity offline.
+type CleanupBoundary interface {
+	CleanupBoundary(Workspace, ArchiveManifest) string
 }

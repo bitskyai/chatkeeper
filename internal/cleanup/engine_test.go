@@ -1,0 +1,332 @@
+//go:build !windows
+
+package cleanup
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/bitskyai/chatkeeper/internal/storage"
+	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+type driver struct {
+	calls     []string
+	check     func() error
+	fail      bool
+	deleteErr error
+}
+
+func (d *driver) Verify(context.Context, pluginapi.ArchiveManifest) error   { return nil }
+func (d *driver) Reason(context.Context, pluginapi.Message) (string, error) { return "", nil }
+func (d *driver) Check(context.Context, pluginapi.ArchiveManifest, []pluginapi.Message, []string) error {
+	if d.check != nil {
+		return d.check()
+	}
+	return nil
+}
+func (d *driver) Delete(_ context.Context, _ pluginapi.ArchiveManifest, m pluginapi.Message) error {
+	d.calls = append(d.calls, m["ts"].(string))
+	if d.deleteErr != nil {
+		return d.deleteErr
+	}
+	if d.fail {
+		return errors.New("unknown outcome")
+	}
+	return nil
+}
+func (d *driver) Pace(context.Context) error { return nil }
+func fixture(t *testing.T) (pluginapi.Workspace, *storage.Folder) {
+	t.Helper()
+	s, e := storage.Open(t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
+	t.Cleanup(func() { s.Close() })
+	w := pluginapi.Workspace{ID: "fixture", Platform: "fixture", Storage: s.Path(), Channels: []string{"CFAKE"}, Trigger: pluginapi.Trigger{Who: "owner", Owners: []string{"UOWNER"}, Reactions: []string{"save"}}, Cleanup: pluginapi.CleanupPolicy{Enabled: true, MinAge: 24 * time.Hour}}
+	v := pluginapi.Snapshot{Manifest: pluginapi.ArchiveManifest{Schema: 1, Platform: "fixture", TeamID: "TFAKE", Channel: "CFAKE", RootTS: "1000000000.000001", MessageCount: 3}, Messages: []pluginapi.Message{{"ts": "1000000000.000001", "user": "UOWN", "text": "root", "reply_count": 2, "reactions": []any{map[string]any{"name": "save", "users": []any{"UOWNER"}, "count": 1}}}, {"ts": "1000000001.000001", "thread_ts": "1000000000.000001", "user": "UOWN", "text": "reply"}, {"ts": "1000000002.000001", "thread_ts": "1000000000.000001", "user": "UOWN", "text": "last"}}, Users: map[string]pluginapi.Message{"UOWN": {"id": "UOWN"}}, Blobs: map[string]pluginapi.Blob{}}
+	_, e = s.Save(context.Background(), pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}, v)
+	if e != nil {
+		t.Fatal(e)
+	}
+	return w, s
+}
+func TestCleanupKeepsArchiveAfterRefresh(t *testing.T) {
+	w, s := fixture(t)
+	ctx := context.Background()
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	before, _ := s.Read(ctx, k)
+	d := &driver{}
+	r := Run(ctx, w, s, d, true)
+	if r.Threads[0].Status != "deleted" || len(d.calls) != 3 {
+		t.Fatalf("%+v %v", r, d.calls)
+	}
+	if d.calls[0] != "1000000002.000001" || d.calls[2] != k.RootTS {
+		t.Fatal(d.calls)
+	}
+	fresh := pluginapi.Snapshot{Manifest: before.Manifest, Users: before.Users, Blobs: map[string]pluginapi.Blob{}}
+	fresh.Manifest.Schema = 2
+	fresh.Manifest.MessageCount = 0
+	if _, e := s.Save(ctx, k, fresh); e != nil {
+		t.Fatal(e)
+	}
+	after, e := s.Read(ctx, k)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if len(after.Messages) != 3 || len(after.SourceDeletedAt) != 3 {
+		t.Fatalf("archive shrank or unmarked: %+v", after)
+	}
+	if string(after.Documents["manifest.json"]) != string(before.Documents["manifest.json"]) {
+		t.Fatal("proof changed")
+	}
+	Run(ctx, w, s, d, true)
+	if len(d.calls) != 3 {
+		t.Fatal("rerun deleted again")
+	}
+}
+func TestOfflineGates(t *testing.T) {
+	for _, tc := range []string{"disabled", "trigger", "owner-missing", "platform", "channel", "recent", "tamper", "journal", "driver"} {
+		t.Run(tc, func(t *testing.T) {
+			w, s := fixture(t)
+			d := &driver{}
+			switch tc {
+			case "disabled":
+				w.Cleanup.Enabled = false
+			case "trigger":
+				w.Trigger.Who = "any"
+			case "owner-missing":
+				w.Trigger.Owners = []string{"UNOMATCH"}
+			case "platform":
+				w.Platform = "other"
+			case "channel":
+				w.Channels = []string{"COTHER"}
+			case "recent":
+				w.Cleanup.MinAge = 1000000 * time.Hour
+			case "tamper":
+				os.WriteFile(filepath.Join(s.Path(), "archive/CFAKE/1000000000.000001/messages.json"), []byte("[]"), 0600)
+			case "journal":
+				os.MkdirAll(filepath.Join(s.Path(), "cleanup"), 0700)
+				os.WriteFile(filepath.Join(s.Path(), "cleanup/CFAKE_1000000000.000001.json"), []byte(`{"version":1}`), 0600)
+			case "driver":
+				d.check = func() error { return errors.New("changed") }
+			}
+			apply := true
+			r := Run(context.Background(), w, s, d, apply)
+			if len(d.calls) != 0 {
+				t.Fatal(d.calls)
+			}
+			if tc != "disabled" && r.Threads[0].Status != "blocked" && r.Threads[0].Status != "deferred" {
+				t.Fatalf("%+v", r)
+			}
+		})
+	}
+}
+func TestUnknownDeletePendingResume(t *testing.T) {
+	w, s := fixture(t)
+	d := &driver{fail: true}
+	r := Run(context.Background(), w, s, d, true)
+	if r.Threads[0].Status != "blocked" || len(d.calls) != 1 {
+		t.Fatalf("%+v", r)
+	}
+	d.fail = false
+	Run(context.Background(), w, s, d, true)
+	if len(d.calls) != 4 {
+		t.Fatal(d.calls)
+	}
+}
+
+func TestGuardRehashesAfterLiveRead(t *testing.T) {
+	w, s := fixture(t)
+	d := &driver{check: func() error {
+		return os.WriteFile(filepath.Join(s.Path(), "archive/CFAKE/1000000000.000001/messages.json"), []byte("[]"), 0600)
+	}}
+	r := Run(context.Background(), w, s, d, true)
+	if len(d.calls) != 0 || r.Threads[0].Status != "blocked" {
+		t.Fatalf("deleted with tampered backup: %+v %v", r, d.calls)
+	}
+}
+func TestJournalRejectsInvalidProgress(t *testing.T) {
+	targets := []string{"reply", "root"}
+	for _, raw := range []string{`{"version":1}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":["root"],"pending":null}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":[],"pending":"root"}`, `{"version":1,"proof":"other","targets":["reply","root"],"done":[],"pending":null}`, `{"version":1,"proof":"p","targets":["reply","root"],"done":null,"pending":null}`} {
+		if _, e := readJournal([]byte(raw), "p", targets); e == nil {
+			t.Fatal("accepted malformed journal", raw)
+		}
+	}
+}
+
+func TestCleanupLockBlocksConcurrentRunner(t *testing.T) {
+	w, s := fixture(t)
+	other, e := storage.Open(s.Path())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer other.Close()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		s.WithCleanup(context.Background(), func(*storage.CleanupView) error { close(entered); <-release; return nil })
+		close(done)
+	}()
+	<-entered
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	d := &driver{}
+	r := Run(ctx, w, other, d, true)
+	close(release)
+	<-done
+	if len(d.calls) != 0 || r.Reason == "" {
+		t.Fatalf("lock bypass %+v", r)
+	}
+}
+func TestPerThreadErrorIsolation(t *testing.T) {
+	w, s := fixture(t)
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	snap, _ := s.Read(context.Background(), k)
+	copy := *snap
+	copy.Documents = nil
+	copy.Manifest.RootTS = "1000000010.000001"
+	copy.Messages = []pluginapi.Message{{"ts": copy.Manifest.RootTS, "user": "UOWN", "text": "second", "reactions": snap.Messages[0]["reactions"]}}
+	copy.Manifest.MessageCount = 1
+	if _, e := s.Save(context.Background(), pluginapi.Key{Channel: "CFAKE", RootTS: copy.Manifest.RootTS}, copy); e != nil {
+		t.Fatal(e)
+	}
+	os.WriteFile(filepath.Join(s.Path(), "archive/CFAKE/"+k.RootTS+"/users.json"), []byte("{}"), 0600)
+	d := &driver{}
+	r := Run(context.Background(), w, s, d, true)
+	if len(r.Threads) != 2 || r.Threads[0].Status != "blocked" || r.Threads[1].Status != "deleted" || len(d.calls) != 1 {
+		t.Fatalf("%+v %v", r, d.calls)
+	}
+}
+func TestCleanupPinnedPendingAndProof(t *testing.T) {
+	w, s := fixture(t)
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	snap, _ := s.Read(context.Background(), k)
+	d := &driver{fail: true}
+	Run(context.Background(), w, s, d, true)
+	fresh := *snap
+	fresh.Documents = nil
+	fresh.Messages = append([]pluginapi.Message{}, snap.Messages...)
+	fresh.Messages[0] = pluginapi.Message{"ts": k.RootTS, "user": "UOWN", "text": "changed", "reply_count": 2}
+	if _, e := s.Save(context.Background(), k, fresh); !errors.Is(e, storage.ErrPinned) {
+		t.Fatal("partial snapshot not pinned", e)
+	}
+	p := filepath.Join(s.Path(), "archive/CFAKE/"+k.RootTS+"/manifest.json")
+	b, _ := os.ReadFile(p)
+	os.WriteFile(p, append(b, ' '), 0600)
+	d.fail = false
+	r := Run(context.Background(), w, s, d, true)
+	if len(d.calls) != 1 || r.Threads[0].Status != "blocked" {
+		t.Fatalf("proof changed but resumed %+v", r)
+	}
+}
+func TestApplyBoundRefusesNewProof(t *testing.T) {
+	w, s := fixture(t)
+	preview := Run(context.Background(), w, s, nil, false)
+	p := filepath.Join(s.Path(), "archive/CFAKE/1000000000.000001/manifest.json")
+	b, _ := os.ReadFile(p)
+	os.WriteFile(p, append(b, ' '), 0600)
+	d := &driver{}
+	r := ApplyBound(context.Background(), w, s, d, preview)
+	if len(d.calls) != 0 || r.Threads[0].Status != "blocked" {
+		t.Fatal(r)
+	}
+}
+
+func TestNewestReplyAgeGate(t *testing.T) {
+	w, s := fixture(t)
+	k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+	snap, _ := s.Read(context.Background(), k)
+	fresh := *snap
+	fresh.Documents = nil
+	fresh.Messages = append([]pluginapi.Message{}, snap.Messages...)
+	fresh.Messages = append(fresh.Messages, pluginapi.Message{"ts": fmt.Sprintf("%d.000001", time.Now().Unix()), "user": "UOWN", "thread_ts": k.RootTS, "text": "new reply"})
+	fresh.Messages[0] = pluginapi.Message{"ts": k.RootTS, "user": "UOWN", "text": "root", "reply_count": 3, "reactions": snap.Messages[0]["reactions"]}
+	fresh.Manifest.MessageCount = 4
+	if _, e := s.Save(context.Background(), k, fresh); e != nil {
+		t.Fatal(e)
+	}
+	d := &driver{}
+	r := Run(context.Background(), w, s, d, true)
+	if r.Threads[0].Status != "deferred" || len(d.calls) != 0 {
+		t.Fatal(r)
+	}
+}
+func TestBackupObjectsBlockWholeThread(t *testing.T) {
+	for _, name := range []string{"messages.json", "users.json", "manifest.json", "files/FFILE.bin"} {
+		for _, damage := range []string{"missing", "corrupt", "truncated"} {
+			t.Run(name+"/"+damage, func(t *testing.T) {
+				w, s := fixture(t)
+				k := pluginapi.Key{Channel: "CFAKE", RootTS: "1000000000.000001"}
+				snap, _ := s.Read(context.Background(), k)
+				snap.Documents = nil
+				snap.Blobs["files/FFILE.bin"] = pluginapi.Blob{Data: []byte("abc"), Size: 3, SHA256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"}
+				snap.Manifest.Files = []pluginapi.Attachment{{ID: "FFILE", Path: "files/FFILE.bin", Name: "file", Size: 3, SHA256: snap.Blobs["files/FFILE.bin"].SHA256}}
+				if _, e := s.Save(context.Background(), k, *snap); e != nil {
+					t.Fatal(e)
+				}
+				p := filepath.Join(s.Path(), "archive", k.Channel, k.RootTS, name)
+				switch damage {
+				case "missing":
+					os.Remove(p)
+				case "corrupt":
+					b, _ := os.ReadFile(p)
+					b[0] ^= 1
+					os.WriteFile(p, b, 0600)
+				case "truncated":
+					os.WriteFile(p, nil, 0600)
+				}
+				d := &driver{}
+				r := Run(context.Background(), w, s, d, true)
+				if len(d.calls) != 0 || r.Threads[0].Status != "blocked" {
+					t.Fatalf("backup damage accepted %+v", r)
+				}
+			})
+		}
+	}
+}
+
+func TestCleanupStatusReports(t *testing.T) {
+	for _, status := range []string{"refused", "rate-limited"} {
+		t.Run(status, func(t *testing.T) {
+			w, s := fixture(t)
+			d := &driver{deleteErr: &pluginapi.CleanupError{Status: status, Reason: "denied"}}
+			r := Run(context.Background(), w, s, d, true)
+			if len(d.calls) != 1 || r.Threads[0].Status != status || r.Threads[0].Results[0].Status != status || r.Threads[0].Results[2].Status != "blocked" {
+				t.Fatalf("%+v", r)
+			}
+			b, _ := os.ReadFile(filepath.Join(s.Path(), "cleanup/CFAKE_1000000000.000001.json"))
+			var j journal
+			if json.Unmarshal(b, &j) != nil || len(j.Done) != 0 || j.Pending == nil || *j.Pending != "1000000002.000001" {
+				t.Fatal("pending lost")
+			}
+		})
+	}
+}
+
+type panicDriver struct{ driver }
+
+func (*panicDriver) Verify(context.Context, pluginapi.ArchiveManifest) error {
+	panic("network must not run")
+}
+func (*panicDriver) Reason(context.Context, pluginapi.Message) (string, error) {
+	panic("identity must not run")
+}
+func TestDryRunNoDriverCalls(t *testing.T) {
+	w, s := fixture(t)
+	r := Run(context.Background(), w, s, &panicDriver{}, false)
+	if len(r.Threads) != 1 || r.Threads[0].Status != "dry-run" || len(r.Threads[0].Results) != 3 {
+		t.Fatal(r)
+	}
+	for _, result := range r.Threads[0].Results {
+		if result.Status != "dry-run" || result.Reason == "" {
+			t.Fatal(result)
+		}
+	}
+}

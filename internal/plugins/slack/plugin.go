@@ -14,7 +14,7 @@ func init() { pluginapi.Register(Plugin{}) }
 type Plugin struct{}
 
 func (Plugin) Manifest() pluginapi.Manifest {
-	return pluginapi.Manifest{ID: "slack", Name: "Slack", Version: "0.1.0", APIVersion: 1, Capabilities: pluginapi.Capabilities{ReadHistory: true, Realtime: true}, ClaimsLegacy: true, DefaultReactions: []string{"white_check_mark"}}
+	return pluginapi.Manifest{ID: "slack", Name: "Slack", Version: "0.1.0", APIVersion: 1, Capabilities: pluginapi.Capabilities{ReadHistory: true, Realtime: true, Delete: true}, ClaimsLegacy: true, DefaultReactions: []string{"white_check_mark"}}
 }
 func (Plugin) ConfigSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"team_id":{"type":"string","pattern":"^T[A-Z0-9]+$"}},"required":["team_id"]}`)
@@ -23,9 +23,6 @@ func (Plugin) CredentialSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"bot_token":{"type":"string","x-secret":true,"x-env-default":"SLACK_BOT_TOKEN"},"app_token":{"type":"string","x-secret":true,"x-env-default":"SLACK_APP_TOKEN"}},"required":["bot_token"]}`)
 }
 func (Plugin) Content() pluginapi.ContentHooks { return Hooks{} }
-func (Plugin) NewCleanupDriver(context.Context, pluginapi.Workspace, pluginapi.Env) (pluginapi.CleanupDriver, error) {
-	return nil, pluginapi.ErrUnsupported
-}
 func validToken(s, prefix string) bool {
 	return strings.HasPrefix(s, prefix) && len(s) > len(prefix) && !strings.ContainsAny(s, " \t\r\n")
 }

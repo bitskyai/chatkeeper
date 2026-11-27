@@ -61,7 +61,7 @@ func TestOffline(t *testing.T) {
 func TestInvalidConfig(t *testing.T) {
 	t.Setenv("FIXTURE_BOT_TOKEN", "xoxb-synthetic")
 	for name, s := range map[string]string{
-		"unknown": valid + "unknown: true\n", "duplicate key": valid + "server: {}\n", "unknown workspace": strings.Replace(valid, "team_id:", "unexpected:", 1), "reserved": strings.Replace(valid, "id: fixture", "id: api", 1), "bad id": strings.Replace(valid, "id: fixture", "id: ../escape", 1), "bad team": strings.ReplaceAll(valid, "TFIXTURE", "wrong"), "empty reactions": strings.Replace(valid, "[white_check_mark]", "[]", 1), "duplicate reactions": strings.Replace(valid, "[white_check_mark]", "[white_check_mark, white_check_mark]", 1), "no owner": strings.Replace(valid, "[UOWNER]", "[]", 1), "bad who": strings.Replace(valid, "who: owner", "who: unknown", 1), "poll zero": valid + "    poll_interval: 0\n", "poll bool": valid + "    poll_interval: true\n", "storage type": strings.Replace(valid, "type: folder", "type: git", 1), "inline token": valid + "    bot_token: secret\n", "cleanup enabled": valid + "    cleanup: {enabled: true}\n", "duplicate channels": strings.Replace(valid, "[CFIXTURE]", "[CFIXTURE, CFIXTURE]", 1), "bad channels": strings.Replace(valid, "[CFIXTURE]", "[../escape]", 1), "multiple documents": valid + "---\n{}\n",
+		"unknown": valid + "unknown: true\n", "duplicate key": valid + "server: {}\n", "unknown workspace": strings.Replace(valid, "team_id:", "unexpected:", 1), "reserved": strings.Replace(valid, "id: fixture", "id: api", 1), "bad id": strings.Replace(valid, "id: fixture", "id: ../escape", 1), "bad team": strings.ReplaceAll(valid, "TFIXTURE", "wrong"), "empty reactions": strings.Replace(valid, "[white_check_mark]", "[]", 1), "duplicate reactions": strings.Replace(valid, "[white_check_mark]", "[white_check_mark, white_check_mark]", 1), "no owner": strings.Replace(valid, "[UOWNER]", "[]", 1), "bad who": strings.Replace(valid, "who: owner", "who: unknown", 1), "poll zero": valid + "    poll_interval: 0\n", "poll bool": valid + "    poll_interval: true\n", "storage type": strings.Replace(valid, "type: folder", "type: git", 1), "inline token": valid + "    bot_token: secret\n", "cleanup invalid": valid + "    cleanup: {enabled: yes}\n", "duplicate channels": strings.Replace(valid, "[CFIXTURE]", "[CFIXTURE, CFIXTURE]", 1), "bad channels": strings.Replace(valid, "[CFIXTURE]", "[../escape]", 1), "multiple documents": valid + "---\n{}\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, e := load(t, s, true); e == nil {
@@ -157,6 +157,30 @@ func TestBindTokenAndLoopback(t *testing.T) {
 			if (e == nil) != (token != "" || Loopback(host)) {
 				t.Fatal(host, token != "", e)
 			}
+		}
+	}
+}
+
+func TestCleanupPolicyDefaultsAndOptIn(t *testing.T) {
+	c, e := load(t, valid, false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	p := c.Workspaces[0].Workspace.Cleanup
+	if p.Enabled || p.AllowOthers || p.OwnOnly || p.MinAge.Hours() != 24 || p.TokenEnv != "CHATKEEPER_CLEANUP_TOKEN" {
+		t.Fatalf("unsafe defaults %+v", p)
+	}
+	c, e = load(t, valid+"    cleanup: {enabled: true, allow_others: true, own_only: true, min_age_hours: 48, token_env: FIXTURE_CLEANUP_TOKEN}\n", false)
+	if e != nil {
+		t.Fatal(e)
+	}
+	p = c.Workspaces[0].Workspace.Cleanup
+	if !p.Enabled || !p.AllowOthers || !p.OwnOnly || p.MinAge.Hours() != 48 || p.TokenEnv != "FIXTURE_CLEANUP_TOKEN" {
+		t.Fatal(p)
+	}
+	for _, value := range []string{"{enabled: 1}", "{own_only: 1}", "{allow_others: yes}", "{min_age_hours: -1}", "{min_age_hours: .inf}", "{token_env: '../secret'}"} {
+		if _, e := load(t, valid+"    cleanup: "+value+"\n", false); e == nil {
+			t.Fatal("accepted unsafe policy", value)
 		}
 	}
 }

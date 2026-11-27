@@ -108,8 +108,16 @@ func (s *Folder) safe(name string) error {
 func (s *Folder) mkdir(name string) error {
 	for i := range strings.Split(name, "/") {
 		part := strings.Join(strings.Split(name, "/")[:i+1], "/")
-		if e := s.root.Mkdir(part, 0700); e != nil && !os.IsExist(e) {
+		created := false
+		if e := s.root.Mkdir(part, 0700); e == nil {
+			created = true
+		} else if !os.IsExist(e) {
 			return e
+		}
+		if created {
+			if e := s.syncDir(path.Dir(part)); e != nil {
+				return e
+			}
 		}
 		if e := s.safe(part); e != nil {
 			return e
@@ -258,6 +266,9 @@ func (s *Folder) Read(ctx context.Context, k pluginapi.Key) (*pluginapi.Snapshot
 		s.fail(k)
 	} else {
 		delete(s.failures, k)
+		if v != nil {
+			e = s.deletionOverlay(k, v)
+		}
 	}
 	return v, e
 }

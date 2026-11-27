@@ -16,7 +16,7 @@ Tracking issues
 | M2 | [#2](https://github.com/bitskyai/chatkeeper/issues/2) | Web UI, first-run Slack wizard, dashboard |
 | M3 | [#3](https://github.com/bitskyai/chatkeeper/issues/3) | Search (FTS5), REST API, MCP server |
 | M4 | [#4](https://github.com/bitskyai/chatkeeper/issues/4) | Release pipeline, Helm/Compose, public launch checklist |
-| M5 | [#5](https://github.com/bitskyai/chatkeeper/issues/5) | Cleanup (archive-then-delete) with all fail-closed gates |
+| M5 | [#1](https://github.com/bitskyai/chatkeeper/issues/1) | Cleanup (archive-then-delete) with all fail-closed gates |
 | Later | [#6](https://github.com/bitskyai/chatkeeper/issues/6) | Discord plugin |
 | Later | [#7](https://github.com/bitskyai/chatkeeper/issues/7) | Telegram plugin |
 | Later | [#8](https://github.com/bitskyai/chatkeeper/issues/8) | Git storage backend |
@@ -638,8 +638,8 @@ Gates ported from the prototype, each with its own test in M5:
 | # | Gate | Blocks when |
 |---|---|---|
 | 1 | Enabled | `cleanup.enabled` is false (default) |
-| 2 | Separate credential | cleanup token missing, malformed, or equal to the archive bot token (Slack: must be a user token) |
-| 3 | Identity | token's workspace differs from config; Slack user is not admin/owner |
+| 2 | Cleanup credential | credential missing/malformed; bot token configured to delete others (reviewed own-bot policy below) |
+| 3 | Identity | live identity differs from workspace; deleting others without a user admin/owner identity |
 | 4 | Workspace boundary | manifest platform or team differs from the workspace; channel not watched |
 | 5 | Archive integrity | any object fails size/sha256 verification, or snapshot unreadable |
 | 6 | Durability (git storage) | local objects differ from `HEAD`, branch is not `main`, remote URLs disagree, or remote `main` is not `HEAD` |
@@ -739,7 +739,7 @@ Full checklists are in the issues.
 | M2 [#2](https://github.com/bitskyai/chatkeeper/issues/2) | Web UI, wizard, dashboard, modes, auth, config writer, hot reload, secrets backends | Browser e2e of the Slack wizard against the fake Slack server in desktop and server mode, including negative paths; security tests (session, CSRF, setup lock, loopback); hot-reload tests; secrets never returned |
 | M3 [#3](https://github.com/bitskyai/chatkeeper/issues/3) | FTS5 search, REST, MCP stdio + streamable HTTP | Ported search/API/MCP cases; delete-index-and-rebuild equivalence; MCP client test over both transports; result parity with the prototype on a golden corpus |
 | M4 [#4](https://github.com/bitskyai/chatkeeper/issues/4) | goreleaser, image, Helm, Compose, migration command, public launch checklist | Release candidate produces signed artifacts; clean-machine smoke test on three OSes; Compose and kind e2e; migration rehearsal; gitleaks clean; SECURITY.md and CONTRIBUTING.md; repo goes public last |
-| M5 [#5](https://github.com/bitskyai/chatkeeper/issues/5) | Cleanup engine, Slack cleanup driver, CLI, UI preview/apply, CronJob | One test per gate in §13 proving zero delete calls; all prototype cleanup tests ported; crash injection around journal writes and delete; live gate on a throwaway workspace |
+| M5 [#1](https://github.com/bitskyai/chatkeeper/issues/1) | Cleanup engine, Slack cleanup driver, CLI, UI preview/apply, CronJob | One test per gate in §13 proving zero delete calls; all prototype cleanup tests ported; crash injection around journal writes and delete; live gate on a throwaway workspace |
 | Later [#6](https://github.com/bitskyai/chatkeeper/issues/6) | Discord plugin | Wizard e2e against a fake Discord; no core or web diff |
 | Later [#7](https://github.com/bitskyai/chatkeeper/issues/7) | Telegram plugin | Wizard e2e against a fake Bot API; no core or web diff |
 | Later [#8](https://github.com/bitskyai/chatkeeper/issues/8) | Git storage | Existing git archives open unchanged; cleanup durability gate |
@@ -780,3 +780,42 @@ Test infrastructure shared across milestones:
    and SmartScreen warnings. Is a documented workaround acceptable for the
    first public release, or should M4 include an Apple Developer ID and
    notarisation (paid account, secrets in CI)?
+
+### M5 implementation clarifications
+
+The reviewed prototype own-bot policy supersedes gate 2's original user-token-only
+wording: Slack bot tokens may delete only their own messages. User tokens may
+also delete their own messages; deleting others requires `allow_others: true`
+and a live admin/owner identity. `own_only: true` always restricts deletion to
+that identity. Cleanup resolves its own credential reference only when applying;
+the archive runtime never resolves cleanup credentials. A dedicated cleanup
+environment reference is recommended; an own-bot credential may have the same
+value as the capture token.
+
+Folder storage is the only currently accepted storage type. Unsupported git
+storage is rejected by configuration, so no unverified git durability fallback
+exists. Destructive cleanup is refused on Windows while durable directory sync
+is unavailable there; offline previews remain available.
+
+The cleanup transaction holds both `cleanup/lock` and the archive writer lock
+through all verification, journal persistence and mutation. Cleanup explicitly
+fsyncs verified snapshot objects and their directory chain, including imported
+archives, before accepting their proof. Snapshot documents
+remain byte-for-byte immutable once cleanup has progress. Version-1 journals
+retain `version`, `proof`, `targets`, `done` and `pending`, adding an optional
+`source_deleted_at` mapping from message timestamp to deletion-observed time.
+`Snapshot.SourceDeletedAt` exposes that metadata without changing source message
+bytes or their sha256 manifest. Keep journals with the archive in backups.
+Legacy v1 journals without timestamps remain resumable; absent timestamps are
+unknown rather than invented. A completed cleanup remains pinned during refresh
+and backfill, retaining every original message and object hash. To archive new
+activity under an already-cleaned root, explicit manual reconciliation is
+required; collectors cannot overwrite the proof.
+
+Preview checks available author/subtype fields offline and explicitly reports
+that live author-identity authorization is deferred until apply. All other
+offline policy/integrity gates run even when age would defer the thread. UI
+previews expire after ten minutes, bind the session, workspace configuration,
+archive proofs and report, and are consumed once. Apply rechecks each proof under
+the archive lock as well as repeating live comparisons. UI audit reports are a
+bounded SQLite copy; journals remain the restart authority.

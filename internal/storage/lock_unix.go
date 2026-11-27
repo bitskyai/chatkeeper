@@ -10,7 +10,7 @@ import (
 )
 
 func syncDirectory(f *os.File) error { return f.Sync() }
-func lockFiles(ctx context.Context, s *Folder) (func(), error) {
+func lockFiles(ctx context.Context, s *Folder, extra ...string) (func(), error) {
 	files := []*os.File{}
 	unlock := func() {
 		for i := len(files) - 1; i >= 0; i-- {
@@ -18,7 +18,7 @@ func lockFiles(ctx context.Context, s *Folder) (func(), error) {
 			_ = files[i].Close()
 		}
 	}
-	for _, name := range []string{".", ".threadkeep.lock", ".chatkeeper.lock"} {
+	for _, name := range append(extra, ".", ".threadkeep.lock", ".chatkeeper.lock") {
 
 		if name != "." {
 			if _, e := s.root.Lstat(name); e == nil {

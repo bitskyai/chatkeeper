@@ -1,0 +1,57 @@
+{{- if .Values.cleanup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-cleanup
+spec:
+  schedule: {{ .Values.cleanup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: cleanup
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              args: [cleanup, --workspace, {{ required "cleanup.workspace is required when cleanup.enabled" .Values.cleanup.workspace | quote }}{{ if .Values.cleanup.apply }}, --apply{{ end }}]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              env:
+                - name: CHATKEEPER_HOME
+                  value: /data/chatkeeper
+              {{- with .Values.envFromSecrets }}
+              envFrom:
+                {{- range . }}
+                - secretRef:
+                    name: {{ . | quote }}
+                {{- end }}
+              {{- end }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+              volumeMounts:
+                - {name: data, mountPath: /data}
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ .Values.persistence.existingClaim | default .Release.Name }}
+            - name: tmp
+              emptyDir: {}
+{{- end }}

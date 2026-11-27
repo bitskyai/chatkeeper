@@ -52,6 +52,9 @@ func execute(args []string, out io.Writer) error {
 		printUsage(out)
 		return nil
 	}
+	if command == "cleanup" {
+		return cleanupCommand(args, out)
+	}
 	if command == "healthcheck" {
 		return healthcheck(args)
 	}
@@ -68,7 +71,7 @@ func execute(args []string, out io.Writer) error {
 	switch command {
 	case "run", "check-config", "backfill", "verify", "mcp":
 	default:
-		return errors.New("usage: chatkeeper run|check-config|backfill|verify|mcp|version|healthcheck")
+		return errors.New("usage: chatkeeper run|check-config|backfill|verify|cleanup|mcp|version|healthcheck")
 	}
 	home := os.Getenv("CHATKEEPER_HOME")
 	if home == "" {
@@ -260,6 +263,7 @@ Commands:
   check-config  Validate configuration (--offline skips credentials)
   backfill      Capture matching threads once
   verify        Verify archive contents without source calls
+  cleanup       Preview cleanup (--workspace X; --apply enables source deletion)
   mcp           Serve read-only MCP over stdio
   healthcheck   GET /healthz; exit 0 when healthy, 1 on failure
   version       Print build version and compiled plugins

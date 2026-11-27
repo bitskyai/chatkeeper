@@ -136,13 +136,13 @@ Go replays successful snapshots against the prototype bytes. The prototype’s m
 | `test_config.py::test_api_token_env_is_optional_redacted_and_configurable` | config/TestBearerConfig; pluginapi/TestCredentialsRedacted |
 | `test_config.py::test_protocol_routes_are_reserved_workspace_names` | config/TestReservedWorkspaceNames |
 | `test_config.py::test_offline_config_can_ignore_unused_invalid_api_token` | config/TestBearerConfig |
-| `test_config.py::test_cleanup_config_rejects_unsafe_options` | Deferred to #5: cleanup authorization/configuration. M1 rejects enabled cleanup and destructive switches (config/TestInvalidConfig). |
+| `test_config.py::test_cleanup_config_rejects_unsafe_options` | config/TestCleanupPolicyDefaultsAndOptIn; cleanup/TestOfflineGates. |
 | `test_config.py::test_archive_config_does_not_load_cleanup_secret` | config/TestMixedTransportAndCleanupSecretIsolation |
-| `test_config.py::test_cleanup_age_and_authorization` | Deferred to #5: cleanup authorization/configuration. M1 rejects enabled cleanup and destructive switches (config/TestInvalidConfig). |
+| `test_config.py::test_cleanup_age_and_authorization` | config/TestCleanupPolicyDefaultsAndOptIn; cleanup/TestOfflineGates. |
 | `test_config.py::test_telegram_cleanup_requires_owner` | Deferred to #6/#7: other-platform configuration. |
 | `test_config.py::test_telegram_cleanup_rejects_impossible_age` | Deferred to #6/#7: other-platform configuration. |
 | `test_config.py::test_discord_cleanup_explicit_own_only_without_collector_secret` | Deferred to #6/#7: other-platform configuration. |
-| `test_config.py::test_cleanup_own_only_requires_boolean` | Deferred to #5: cleanup authorization/configuration. M1 rejects enabled cleanup and destructive switches (config/TestInvalidConfig). |
+| `test_config.py::test_cleanup_own_only_requires_boolean` | config/TestCleanupPolicyDefaultsAndOptIn; cleanup/TestOfflineGates. |
 
 ## New acceptance and safety coverage
 
@@ -306,3 +306,76 @@ Origin-checked; an absent token does not make MCP public. REST's `cursor` alias
 preserves prototype clients while `after` matches the design. No archive format
 change is introduced by M3. Native Windows/macOS runtime testing remains release
 work; CI keeps all existing jobs and six cgo-free cross-builds.
+
+## M5 cleanup parity (prototype origin/main `3162124`, reviewed own-bot policy)
+
+Every test function from `test_cleanup.py` and `test_cleanup_http.py` is listed
+below. Parameterized Go subtests cover variants. Platform-specific Discord and
+Telegram cases are explicitly deferred because those plugins are not shipped;
+there is no generic driver fallback. Git-specific cases are rejected at config
+load because git storage is not implemented, rather than claiming durability.
+The old user-only credential rule is superseded by the reviewed own-bot policy.
+
+| Prototype case | Go coverage or explicit scope reason |
+|---|---|
+| `test_cleanup.py::test_cleanup_requires_enabled_and_apply` | cleanup/TestOfflineGates; cmd/chatkeeper/TestCleanupOfflineCLI |
+| `test_cleanup.py::test_cleanup_rehashes_and_reports_corruption` | cleanup/TestBackupObjectsBlockWholeThread |
+| `test_cleanup.py::test_replies_before_root_and_idempotent_resume` | cleanup/TestCleanupKeepsArchiveAfterRefresh |
+| `test_cleanup.py::test_failed_reply_preserves_root` | cleanup/TestUnknownDeletePendingResume |
+| `test_cleanup.py::test_source_change_blocks` | slack/TestCleanupLiveComparison |
+| `test_cleanup.py::test_wrong_workspace_or_channel_blocks` | cleanup/TestOfflineGates; slack/TestCleanupIdentityAndOwnBot |
+| `test_cleanup.py::test_git_unpushed_or_different_worktree_blocks` | config/TestInvalidConfig/storage_type: git storage is unsupported and rejected before cleanup; remote/HEAD proof tests deferred until git storage ships |
+| `test_cleanup.py::test_malformed_journal_cannot_skip_reply_and_delete_root` | cleanup/TestJournalRejectsInvalidProgress |
+| `test_cleanup.py::test_git_remote_proof_allows_only_pushed_snapshot` | config/TestInvalidConfig/storage_type: git storage is unsupported and rejected before cleanup; remote/HEAD proof tests deferred until git storage ships |
+| `test_cleanup.py::test_archive_changed_after_partial_cleanup_blocks_resume` | cleanup/TestCleanupPinnedPendingAndProof |
+| `test_cleanup.py::test_durability_rechecked_between_deletions` | cleanup/TestGuardRehashesAfterLiveRead; cleanup/TestBackupObjectsBlockWholeThread |
+| `test_cleanup.py::test_partial_cleanup_pins_snapshot_against_collector_overwrite` | cleanup/TestCleanupPinnedPendingAndProof |
+| `test_cleanup.py::test_recent_thread_is_deferred` | cleanup/TestOfflineGates/recent |
+| `test_cleanup.py::test_old_root_with_fresh_reply_is_deferred` | cleanup/TestNewestReplyAgeGate |
+| `test_cleanup.py::test_slack_others_requires_archived_owner_trigger` | cleanup/TestOfflineGates/trigger |
+| `test_cleanup.py::test_missing_backup_object_never_deletes` | cleanup/TestBackupObjectsBlockWholeThread |
+| `test_cleanup.py::test_partial_failure_reports_each_message_and_resume` | cleanup/TestUnknownDeletePendingResume; cleanup/TestCrashResumeBoundaries |
+| `test_cleanup.py::test_dry_run_reports_each_message` | cleanup/TestDryRunNoDriverCalls; web_test/TestBrowserCleanupPreviewApply |
+| `test_cleanup.py::test_attachment_backup_must_be_present_and_rehashed` | cleanup/TestBackupObjectsBlockWholeThread |
+| `test_cleanup.py::test_dry_run_untriggered_is_blocked` | cleanup/TestOfflineGates/trigger |
+| `test_cleanup.py::test_thread_error_is_reported_and_run_continues` | cleanup/TestPerThreadErrorIsolation |
+| `test_cleanup.py::test_completed_cleanup_allows_collector_scan` | slack_test/TestCleanupThenRuntimeRefreshAndBackfillNeverDrops; slack_test/TestRealCleanupGate (live tag) |
+| `test_cleanup.py::test_offline_slack_dry_run_reports_plan_without_identity` | web_test/TestBrowserCleanupPreviewApply; cmd/chatkeeper/TestCleanupOfflineCLI |
+| `test_cleanup_http.py::test_slack_separate_user_identity_own_only_and_post` | slack/TestCleanupIdentityAndOwnBot; slack/TestCleanupAdminPolicy; slack/TestCleanupRetryGuardAndUnknown |
+| `test_cleanup_http.py::test_discord_manage_messages_required_and_actual_starter_target` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_telegram_strict_age_limit` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_rate_limit_retries_and_ambiguous_failure_is_not_retried` | slack/TestCleanupRetryGuardAndUnknown |
+| `test_cleanup_http.py::test_slack_bot_credential_own_only` | slack/TestCleanupIdentityAndOwnBot |
+| `test_cleanup_http.py::test_shared_discord_bot_credential_blocks_other_authors` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_live_slack_edit_or_growth_blocks` | slack/TestCleanupLiveComparison |
+| `test_cleanup_http.py::test_allow_others_requires_admin_identity` | slack/TestCleanupAdminPolicy |
+| `test_cleanup_http.py::test_archive_http_sends_user_agent` | slack/TestCleanupUserAgent; only Slack is shipped |
+| `test_cleanup_http.py::test_slack_resume_uncertain_root_accepts_exact_thread_absence` | slack/TestCleanupLiveComparison/absent-pending; cleanup/TestCrashResumeBoundaries |
+| `test_cleanup_http.py::test_slack_unexpected_missing_root_blocks` | slack/TestCleanupLiveComparison/absent-unexpected |
+| `test_cleanup_http.py::test_telegram_uses_raw_date_not_inconsistent_normalized_age` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_discord_reply_cannot_target_parent_message` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_real_runner_reconciles_unknown_slack_outcome` | cleanup/TestCrashResumeBoundaries/after-delete |
+| `test_cleanup_http.py::test_telegram_buffer_edit_blocks_real_runner` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_slack_cosmetic_fields_do_not_block` | slack/TestCleanupLiveComparison/cosmetic |
+| `test_cleanup_http.py::test_slack_unmark_blocks` | slack/TestCleanupLiveComparison/unmark |
+| `test_cleanup_http.py::test_rate_limit_retry_reverifies_backup_before_second_delete` | slack/TestCleanupRetryGuardAndUnknown/guard; cleanup/TestGuardRehashesAfterLiveRead |
+| `test_cleanup_http.py::test_discord_runner_resumes_uncertain_reply_and_deletes_actual_starter` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_telegram_refuses_backlog_or_stale_buffer` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_definite_http_refusal_status` | slack/TestCleanupRetryGuardAndUnknown/refused |
+| `test_cleanup_http.py::test_discord_float_retry_after` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_slack_multipage_replies` | slack/TestCleanupLiveComparison; slack/TestCleanupPagination |
+| `test_cleanup_http.py::test_dry_run_telegram_too_old` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_offline_slack_policy_without_identity` | slack/TestCleanupOfflineSubtype; slack/TestCleanupOfflinePolicy |
+| `test_cleanup_http.py::test_runner_reports_definite_refusals` | cleanup/TestCleanupStatusReports |
+| `test_cleanup_http.py::test_shared_discord_requires_explicit_own_only` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_unverified_identity_refuses_delete_without_http` | slack/TestCleanupIdentityAndOwnBot |
+| `test_cleanup_http.py::test_author_check_requires_explicit_offline_dry_run` | slack/TestCleanupIdentityAndOwnBot; slack/TestCleanupOfflinePolicy |
+| `test_cleanup_http.py::test_discord_missing_collector_credential_refuses_without_own_only` | Deferred to the corresponding plugin milestone: platform-specific API/policy does not exist in the shipped Slack-only build |
+| `test_cleanup_http.py::test_guard_refuses_identity_lost_during_source_check` | slack/TestCleanupLostIdentity |
+
+Additional M5 coverage: process-kill restart tests around pending/delete/done;
+proof-bound UI apply, session/CSRF/typed-confirmation/server-password checks;
+Chrome enable/preview/apply/results flow; archive backup object damage matrix;
+cleanup + empty refresh/backfill retains all content, original manifest hashes
+and journal deletion metadata. The archive runtime import boundary remains
+covered by `architecture/TestPlatformBoundaries`.

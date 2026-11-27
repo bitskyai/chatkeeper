@@ -109,7 +109,7 @@ func Check(t *testing.T, p pluginapi.Plugin, ws pluginapi.Workspace, env plugina
 	case <-stopCtx.Done():
 		t.Fatal("Stop ignored deadline")
 	}
-	if !caps.Delete {
+	if !m.Capabilities.Delete {
 		if _, e = p.NewCleanupDriver(context.Background(), ws, env); !errors.Is(e, pluginapi.ErrUnsupported) {
 			t.Fatal("read-only plugin exposes cleanup")
 		}

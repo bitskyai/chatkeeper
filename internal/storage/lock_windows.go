@@ -15,7 +15,7 @@ var unlockFileEx = kernel.NewProc("UnlockFileEx")
 // Windows cannot fsync directory handles; file FlushFileBuffers plus atomic rename
 // provides process-crash recovery. Power-loss durability depends on the filesystem.
 func syncDirectory(_ *os.File) error { return nil }
-func lockFiles(ctx context.Context, s *Folder) (func(), error) {
+func lockFiles(ctx context.Context, s *Folder, extra ...string) (func(), error) {
 	files := []*os.File{}
 	ovs := []*syscall.Overlapped{}
 	unlock := func() {
@@ -24,7 +24,7 @@ func lockFiles(ctx context.Context, s *Folder) (func(), error) {
 			_ = files[i].Close()
 		}
 	}
-	for _, name := range []string{".threadkeep.lock", ".chatkeeper.lock"} {
+	for _, name := range append(extra, ".threadkeep.lock", ".chatkeeper.lock") {
 		if _, e := s.root.Lstat(name); e == nil {
 			if e = s.safe(name); e != nil {
 				unlock()
