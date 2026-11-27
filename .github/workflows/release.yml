@@ -39,6 +39,17 @@ jobs:
       - name: Verify checksums
         working-directory: dist
         run: sha256sum --check SHA256SUMS
+      - name: Publish Homebrew formula (stable tags only)
+        env:
+          TAG: ${{ github.ref_name }}
+          # Optional: fine-grained PAT with contents:write on bitskyai/homebrew-tap.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          [ -n "$HOMEBREW_TAP_TOKEN" ] || { echo "HOMEBREW_TAP_TOKEN unset; formula not published"; exit 0; }
+          formula="$RUNNER_TEMP/chatkeeper.rb"
+          python3 scripts/make-formula.py --version "${TAG#v}" --sums dist/SHA256SUMS --out "$formula"
+          ruby -c "$formula"
+          scripts/publish-tap.sh Formula/chatkeeper.rb "$formula" "chatkeeper $TAG"
   container:
     needs: release
     environment: release

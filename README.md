@@ -10,19 +10,59 @@ Discord and Telegram are planned. Capture never deletes source messages. MIT lic
 ![Desktop setup](docs/screenshots/desktop-platforms.png)
 ![Archived thread viewer](docs/screenshots/desktop-viewer.png)
 
-## Desktop quick start
+## Install
 
-1. Download the archive for your OS and CPU from [GitHub Releases](https://github.com/bitskyai/chatkeeper/releases).
-   macOS is `darwin`; Apple Silicon is `arm64`; Intel/AMD is `amd64`.
-2. Extract it and run `./chatkeeper` (Windows: `.\chatkeeper.exe`).
-3. Your browser opens the local setup wizard. Connect Slack, select channels,
-   choose root reactions, and test capture.
+### Homebrew (macOS and Linux)
+
+```sh
+brew install bitskyai/tap/chatkeeper            # CLI + local server (formula)
+brew install --cask bitskyai/tap/chatkeeper-app # macOS menu-bar app (bundles the server)
+```
+
+Run `chatkeeper` to open the local setup wizard, or keep it running in the
+background with `brew services start chatkeeper` and run `chatkeeper` again to
+open the browser UI of the running instance. Install one or the other for
+day-to-day use: both share the same data folder and instance lock, so the app
+attaches to a running `brew services` server rather than starting a second one.
+Upgrade with `brew upgrade chatkeeper` / `brew upgrade --cask chatkeeper-app`.
+The tap is [bitskyai/homebrew-tap](https://github.com/bitskyai/homebrew-tap) and
+receives stable releases only; prereleases are download-only.
+
+### Direct download
+
+Download the archive for your OS and CPU from
+[GitHub Releases](https://github.com/bitskyai/chatkeeper/releases), extract it and run
+the binary. Your browser opens the local setup wizard: connect Slack, select
+channels, choose root reactions, and test capture.
+
+| OS | Archive | Run |
+| --- | --- | --- |
+| macOS, Apple silicon | `chatkeeper_VERSION_darwin_arm64.tar.gz` | `./chatkeeper` |
+| macOS, Intel | `chatkeeper_VERSION_darwin_amd64.tar.gz` | `./chatkeeper` |
+| Linux x86-64 / arm64 | `chatkeeper_VERSION_linux_amd64.tar.gz` / `_linux_arm64` | `./chatkeeper` |
+| Windows x86-64 / arm64 | `chatkeeper_VERSION_windows_amd64.zip` / `_windows_arm64` | `.\chatkeeper.exe` |
 
 Use `./chatkeeper --no-browser` to print the launch URL. The desktop listener is
 loopback-only. macOS binaries are not notarized and Windows binaries are not
-Authenticode signed. After verifying the download, use your OS's explicit
+Authenticode signed yet. After verifying the download, use your OS's explicit
 approval flow for an unsigned app. On macOS, if necessary:
 `xattr -d com.apple.quarantine ./chatkeeper`.
+
+### macOS menu-bar app
+
+`ChatKeeper-VERSION.dmg` on each release (or the `chatkeeper-app` cask above) is a
+universal (Apple silicon + Intel) menu-bar app for macOS 13+. It runs the bundled
+server in the background and shows its status (running, capturing, paused, needs
+attention). From the menu you can open ChatKeeper in the browser, jump to the five
+most recent archives, pause or resume capture, start at login, and check for updates.
+It shares the CLI's data folder and instance lock, so if `chatkeeper` or
+`brew services` is already running the app attaches to it.
+
+v0.1 is **not signed with an Apple Developer ID**. After dragging it to
+Applications, right-click (Control-click) ChatKeeper → **Open** → **Open** once. On
+macOS 15+, use System Settings → Privacy & Security → **Open Anyway**. Or run
+`xattr -dr com.apple.quarantine /Applications/ChatKeeper.app`. The Homebrew cask
+does this for you. Building and signing details: [desktop/macos](desktop/macos/README.md).
 
 Before running a download, verify its checksum and GitHub provenance:
 
@@ -34,7 +74,16 @@ gh attestation verify chatkeeper_VERSION_linux_amd64.tar.gz --repo bitskyai/chat
 ```
 
 Releases include six archives, SHA256SUMS and per-archive Syft SBOMs. GitHub build
-attestations cover archives, SBOMs and checksums. The image has BuildKit SBOM and
+attestations cover archives, SBOMs and checksums. The macOS app's
+`ChatKeeper-VERSION.dmg` and `.zip` are listed in their own
+`ChatKeeper-VERSION.sha256` (not in SHA256SUMS) and are attested too:
+
+```sh
+shasum -a 256 -c ChatKeeper-VERSION.sha256
+gh attestation verify ChatKeeper-VERSION.dmg --repo bitskyai/chatkeeper
+```
+
+The container image has BuildKit SBOM and
 provenance plus a GitHub attestation. Keyless cosign signing is optional and is
 not enabled; do not expect `.sig` files.
 

@@ -173,7 +173,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Session unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+			http.Redirect(w, r, safeNext(r.URL.Query().Get("next")), http.StatusSeeOther)
 			return
 		}
 		http.Error(w, "Open the launch URL from this device", http.StatusUnauthorized)

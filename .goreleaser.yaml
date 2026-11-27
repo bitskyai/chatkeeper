@@ -28,3 +28,7 @@ release:
   prerelease: auto
 changelog:
   sort: asc
+# Homebrew: GoReleaser's `brews` (formulae) is deprecated and its replacement,
+# `homebrew_casks`, cannot declare a `brew services` daemon. The release
+# workflow renders Formula/chatkeeper.rb with scripts/make-formula.py from
+# dist/SHA256SUMS instead; desktop/macos renders the chatkeeper-app cask.

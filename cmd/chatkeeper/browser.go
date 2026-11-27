@@ -114,6 +114,20 @@ func runWeb(home, path, mode, bind, hosts string, noBrowser, dev bool, out io.Wr
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	if gone := defaultLauncherWatch().start(ctx); gone != nil {
+		// When the launcher dies it also takes the read ends of our stdout
+		// and stderr pipes; a write there must fail with EPIPE, not kill us
+		// with SIGPIPE before the graceful shutdown removes instance.url.
+		signal.Ignore(syscall.SIGPIPE)
+		go func() {
+			select {
+			case reason := <-gone:
+				fmt.Fprintln(os.Stderr, "chatkeeper: "+reason+"; shutting down")
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+	}
 	go app.Watch(ctx)
 	stopReload := watchReload(ctx, app)
 	defer stopReload()

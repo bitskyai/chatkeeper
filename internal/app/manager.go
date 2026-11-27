@@ -244,6 +244,39 @@ func (m *Manager) Watch(ctx context.Context) {
 	}
 }
 
+// SetAllPaused sets (not toggles) the paused state of every running workspace
+// in one reload. persist records the affected ids while the reload lock is
+// held; if the reload or persist fails, every workspace keeps its previous
+// state and the error is returned.
+func (m *Manager) SetAllPaused(paused bool, persist func(ids []string) error) error {
+	m.reloadMu.Lock()
+	defer m.reloadMu.Unlock()
+	m.mu.Lock()
+	ids := make([]string, 0, len(m.running))
+	for id := range m.running {
+		ids = append(ids, id)
+	}
+	m.mu.Unlock()
+	previous := make(map[string]bool, len(m.paused))
+	for k, v := range m.paused {
+		previous[k] = v
+	}
+	restore := func() { m.paused = previous }
+	for _, id := range ids {
+		m.paused[id] = paused
+	}
+	if err := m.reload(); err != nil {
+		restore()
+		return err
+	}
+	if err := persist(ids); err != nil {
+		restore()
+		_ = m.reload()
+		return err
+	}
+	return nil
+}
+
 func (m *Manager) SetPaused(id string, paused bool) {
 	m.reloadMu.Lock()
 	defer m.reloadMu.Unlock()
