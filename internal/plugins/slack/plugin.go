@@ -97,5 +97,7 @@ func (Plugin) NewSession(_ context.Context, ws pluginapi.Workspace, env pluginap
 	for _, name := range ws.Trigger.Reactions {
 		triggers[baseReaction(name)] = true
 	}
-	return &Session{client: NewClient(env.Credentials["bot_token"], env.HTTP), team: str(m["team_id"]), appToken: env.Credentials["app_token"], triggers: triggers}, nil
+	client := NewClient(env.Credentials["bot_token"], env.HTTP)
+	client.log = pluginapi.RedactingLogger(env.Log, env.Credentials)
+	return &Session{client: client, team: str(m["team_id"]), appToken: env.Credentials["app_token"], triggers: triggers}, nil
 }

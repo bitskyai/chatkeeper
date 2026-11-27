@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "ts": "100.000001",
+      "text": "corpusneedle <script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+      "reply_count": 0,
+      "bot_profile": {
+        "name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+        "icons": {
+          "image_48": "javascript:alert(1)"
+        }
+      },
+      "subtype": "slackbot_response"
+    }
+  ],
+  "has_more": false
+}

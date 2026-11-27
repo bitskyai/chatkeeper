@@ -359,13 +359,13 @@ func Content(message pluginapi.Message) ([]map[string]any, []string, error) {
 		return nil
 	}
 	if e := fileList(message); e != nil {
-		return nil, nil, e
+		return files, texts, e
 	}
 	if e := blocks(message, 0); e != nil {
-		return nil, nil, e
+		return files, texts, e
 	}
 	if e := attachments(message, 0); e != nil {
-		return nil, nil, e
+		return files, texts, e
 	}
 	return files, texts, nil
 }
@@ -416,7 +416,8 @@ func (Hooks) Author(_ context.Context, user pluginapi.Message) (string, error) {
 func (Hooks) Text(_ context.Context, m pluginapi.Message, users map[string]pluginapi.Message) (string, error) {
 	_, texts, e := Content(m)
 	if e != nil {
-		return "", e
+		// Extraction limits affect only this item; preserve any text already found.
+		texts = append(texts, "[unrendered: "+pluginapi.Redact(e.Error())+"]")
 	}
 	if text := str(m["text"]); text != "" {
 		texts = append([]string{text}, texts...)
@@ -473,7 +474,15 @@ func (Hooks) Validate(ctx context.Context, v pluginapi.Snapshot) error {
 		}
 		entries, _, e := Content(msg)
 		if e != nil {
-			return e
+			noted := false
+			for _, g := range m.Gaps {
+				if g.Kind == "unrendered" && g.Message == str(msg["ts"]) {
+					noted = true
+				}
+			}
+			if !noted {
+				return e
+			}
 		}
 		for _, f := range entries {
 			if id(f["id"], "file") {

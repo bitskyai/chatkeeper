@@ -213,7 +213,18 @@ final class ServerSupervisor {
     }
 
     private func writeLog(_ text: String) {
-        log?.write(Data(redactSecrets(text).utf8))
+        let data = Data(redactSecrets(text).utf8)
+        // Close before rotation, then reopen the active file on the serial queue.
+        try? log?.close()
+        log = nil
+        do {
+            try rotateLog(at: Self.logURL, incoming: data.count)
+            openLog()
+            try log?.write(contentsOf: data)
+        } catch {
+            // Logging failure must not kill capture; retry opening on the next write.
+            log = nil
+        }
     }
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/bitskyai/chatkeeper/internal/core"
 	"github.com/bitskyai/chatkeeper/internal/storage"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
+	"log/slog"
 	"runtime"
 	"slices"
 	"sort"
@@ -87,6 +88,7 @@ func validProgress(j *journal, targets []string) bool {
 
 // Run performs no driver calls during preview. Network calls never hold archive locks.
 func Run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d pluginapi.CleanupDriver, apply bool, progress ...func(Report)) Report {
+	slog.Info("cleanup step", "workspace", w.ID, "apply", apply)
 	return run(ctx, w, s, d, apply, nil, progress...)
 }
 
@@ -158,6 +160,7 @@ func run(ctx context.Context, w pluginapi.Workspace, s *storage.Folder, d plugin
 				}
 			}
 		}
+		slog.Info("cleanup thread result", "workspace", w.ID, "channel", k.Channel, "root", k.RootTS, "status", t.Status, "reason", pluginapi.Redact(t.Reason))
 		r.Threads = append(r.Threads, t)
 		for _, notify := range progress {
 			notify(r)

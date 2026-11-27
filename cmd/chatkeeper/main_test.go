@@ -109,3 +109,21 @@ func TestHealthcheckTimeout(t *testing.T) {
 		t.Fatal("stalled server accepted")
 	}
 }
+
+func TestLogsCommand(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CHATKEEPER_HOME", home)
+	if e := os.MkdirAll(filepath.Join(home, "logs"), 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(filepath.Join(home, "logs", "chatkeeper.log"), []byte("{\"msg\":\"poll\"}\n{\"msg\":\"archive\"}\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	var out bytes.Buffer
+	if e := execute([]string{"logs", "--filter", "archive"}, &out); e != nil {
+		t.Fatal(e)
+	}
+	if strings.Contains(out.String(), "poll") || !strings.Contains(out.String(), "archive") {
+		t.Fatal(out.String())
+	}
+}

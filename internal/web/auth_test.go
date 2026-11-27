@@ -25,7 +25,7 @@ func TestSecurityBoundary(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer a.Close()
-	for _, path := range []string{"/", "/setup/", "/settings/", "/view/", "/api/config"} {
+	for _, path := range []string{"/", "/setup/", "/settings/", "/view/", "/api/config", "/logs/", "/logs/?download=1"} {
 		r := httptest.NewRequest("GET", "http://127.0.0.1"+path, nil)
 		w := httptest.NewRecorder()
 		a.ServeHTTP(w, r)

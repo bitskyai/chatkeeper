@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "ts": "100.000001",
+      "text": 42,
+      "reply_count": "0",
+      "bot_profile": {
+        "name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+        "icons": {
+          "image_48": "javascript:alert(1)"
+        }
+      },
+      "user": 17,
+      "blocks": [
+        {
+          "type": "section",
+          "text": 42
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

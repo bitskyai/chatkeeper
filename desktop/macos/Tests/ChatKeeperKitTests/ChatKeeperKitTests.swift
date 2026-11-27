@@ -182,3 +182,28 @@ final class OwnedChildTests: XCTestCase {
         XCTAssertEqual(env["PATH"], "/usr/bin")
     }
 }
+
+final class DiagnosticsTests: XCTestCase {
+    func testDiagnosticsRedactsAndBoundsLines() {
+        let secret = "xoxb-" + "synthetic-credential"
+        let lines = (0..<250).map { "line \($0)" }.joined(separator: "\n") + "\nBearer abc-secret\n\(secret)\ntoken=launch-secret"
+        let text = diagnostics(version: "1.2.3", os: "testOS", log: lines)
+        XCTAssertTrue(text.contains("1.2.3"))
+        XCTAssertTrue(text.contains("testOS"))
+        XCTAssertFalse(text.contains("synthetic-credential"))
+        XCTAssertFalse(text.contains("abc-secret"))
+        XCTAssertFalse(text.contains("launch-secret"))
+        XCTAssertFalse(text.contains("line 0\n"))
+        XCTAssertTrue(text.contains("line 249"))
+    }
+    func testRotation() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("child.log")
+        try Data("first".utf8).write(to: url)
+        try rotateLog(at: url, incoming: 20, maxBytes: 10, backups: 2)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(try String(contentsOf: URL(fileURLWithPath: url.path + ".1")), "first")
+    }
+}

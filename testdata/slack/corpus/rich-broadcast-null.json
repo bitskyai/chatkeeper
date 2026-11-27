@@ -1,0 +1,45 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "ts": "100.000001",
+      "text": "corpusneedle <script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+      "reply_count": 0,
+      "bot_profile": {
+        "name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+        "icons": {
+          "image_48": "javascript:alert(1)"
+        }
+      },
+      "blocks": [
+        {
+          "type": "rich_text",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "broadcast",
+                  "text": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+                  "url": "javascript:alert(1)",
+                  "name": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+                  "user_id": "UFIXTURE",
+                  "usergroup_id": "SFIXTURE",
+                  "channel_id": "CFIXTURE",
+                  "range": "here",
+                  "timestamp": 1700000000,
+                  "fallback": "<script>alert(\"corpus\")</script><img src=x onerror=alert(1)>",
+                  "value": "#ff0000",
+                  "team_id": "TFIXTURE",
+                  "style": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

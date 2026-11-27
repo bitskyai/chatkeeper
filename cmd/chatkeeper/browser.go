@@ -9,6 +9,7 @@ import (
 	"github.com/bitskyai/chatkeeper/internal/config"
 	"github.com/bitskyai/chatkeeper/internal/web"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -42,6 +43,7 @@ func runWeb(home, path, mode, bind, hosts string, noBrowser, dev bool, out io.Wr
 		return errors.New("bind must be host:port")
 	}
 	mode = web.ConfiguredMode(mode, host)
+	slog.Info("server configuration", "mode", mode, "bind", bind, "version", version, "persistent_logs", filepath.Join(home, "logs", "chatkeeper.log"))
 	if mode == "desktop" && !config.Loopback(host) {
 		return errors.New("desktop requires loopback bind")
 	}

@@ -185,6 +185,22 @@ final class AppModel: ObservableObject {
         refreshLoginItem()
     }
 
+    func copyDiagnostics() {
+        let url = ServerSupervisor.logURL
+        // Bound disk reads even when an old unrotated installation left a huge log.
+        var text = ""
+        if let file = try? FileHandle(forReadingFrom: url) {
+            defer { try? file.close() }
+            let size = (try? file.seekToEnd()) ?? 0
+            try? file.seek(toOffset: size > 1024 * 1024 ? size - 1024 * 1024 : 0)
+            text = String(decoding: (try? file.readToEnd()) ?? Data(), as: UTF8.self)
+        }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let report = diagnostics(version: version, os: ProcessInfo.processInfo.operatingSystemVersionString, log: text)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(report, forType: .string)
+    }
+
     func openLogs() {
         NSWorkspace.shared.activateFileViewerSelecting([ServerSupervisor.logURL])
     }

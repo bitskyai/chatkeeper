@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "subtype": "me_message",
+      "user": "UFIXTURE",
+      "type": "message",
+      "ts": "100.000001",
+      "bot_id": "BFIXTURE",
+      "app_id": "AFIXTURE",
+      "text": "[chatkeeper-corpus] corpusneedle synthetic-run me_message",
+      "blocks": [
+        {
+          "type": "rich_text",
+          "block_id": "synthetic",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "[chatkeeper-corpus] corpusneedle synthetic-run me_message"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "reactions": [
+        {
+          "name": "white_check_mark",
+          "users": [
+            "UFIXTURE"
+          ],
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "has_more": false
+}

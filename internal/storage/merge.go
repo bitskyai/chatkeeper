@@ -121,6 +121,24 @@ func merge(old, fresh pluginapi.Snapshot, now string) (pluginapi.Snapshot, error
 		}
 		return a < b
 	})
+	rawDocuments := map[string][]byte{}
+	for path, b := range old.Documents {
+		if strings.HasPrefix(path, "raw/") {
+			rawDocuments[path] = bytes.Clone(b)
+		}
+	}
+	for path, b := range fresh.Documents {
+		if strings.HasPrefix(path, "raw/") {
+			rawDocuments[path] = bytes.Clone(b)
+		}
+	}
+	for path, b := range fresh.RawDocuments {
+		if prior, ok := rawDocuments[path]; ok && !bytes.Equal(prior, b) {
+			return fresh, ErrIntegrity
+		}
+		rawDocuments[path] = bytes.Clone(b)
+	}
+	fresh.RawDocuments = rawDocuments
 	fresh.Messages = out
 	fresh.Manifest.MessageCount = len(out)
 	fresh.Manifest.Schema = schema

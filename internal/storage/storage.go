@@ -31,7 +31,7 @@ const MaxSnapshot int64 = 512 << 20
 var ErrIntegrity = errors.New("snapshot integrity verification failed")
 var ErrPinned = errors.New("snapshot pinned by cleanup")
 var segment = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}$`)
-var objectPath = regexp.MustCompile(`^(messages\.json|users\.json|files/[A-Za-z0-9_-]+\.bin)$`)
+var objectPath = regexp.MustCompile(`^(messages\.json|users\.json|raw/[A-Za-z0-9_-]+\.json|files/[A-Za-z0-9_-]+\.bin)$`)
 
 type Failure struct {
 	Key   pluginapi.Key
@@ -311,7 +311,7 @@ func (s *Folder) read(ctx context.Context, k pluginapi.Key, base string) (*plugi
 		}
 		rel := strings.TrimPrefix(name, base+"/")
 		if d.IsDir() {
-			if rel != "files" {
+			if rel != "files" && rel != "raw" {
 				return ErrIntegrity
 			}
 			return nil
@@ -386,6 +386,20 @@ func (s *Folder) read(ctx context.Context, k pluginapi.Key, base string) (*plugi
 // Prepare rebuilds JSON documents and manifest hashes from the in-memory data.
 func Prepare(v pluginapi.Snapshot) (pluginapi.Snapshot, error) {
 	docs := map[string][]byte{}
+	for p, b := range v.Documents {
+		if strings.HasPrefix(p, "raw/") && objectPath.MatchString(p) {
+			docs[p] = bytes.Clone(b)
+		}
+	}
+	for p, b := range v.RawDocuments {
+		if !strings.HasPrefix(p, "raw/") || !objectPath.MatchString(p) {
+			return v, ErrIntegrity
+		}
+		if prior, ok := docs[p]; ok && !bytes.Equal(prior, b) {
+			return v, ErrIntegrity
+		}
+		docs[p] = bytes.Clone(b)
+	}
 	var e error
 	docs["messages.json"], e = Canonical(v.Messages)
 	if e != nil {
@@ -414,7 +428,7 @@ func Validate(k pluginapi.Key, v pluginapi.Snapshot) error {
 	if !validKey(k) || (m.Schema != 1 && m.Schema != 2) || m.Channel != k.Channel || m.RootTS != k.RootTS || !segment.MatchString(m.TeamID) || m.MessageCount != len(v.Messages) || len(v.Messages) == 0 || v.Users == nil || m.Files == nil {
 		return ErrIntegrity
 	}
-	if len(m.Objects) != 2+len(v.Blobs) || len(v.Documents) != 3 {
+	if len(m.Objects) != len(v.Documents)-1+len(v.Blobs) || len(v.Documents) < 3 {
 		return ErrIntegrity
 	}
 	var total int64
@@ -690,6 +704,11 @@ func (s *Folder) Save(ctx context.Context, k pluginapi.Key, v pluginapi.Snapshot
 	}
 	defer s.root.RemoveAll(stage)
 	for rel, b := range v.Documents {
+		if strings.HasPrefix(rel, "raw/") {
+			if e = s.mkdir(stage + "/raw"); e != nil {
+				return false, e
+			}
+		}
 		if e = s.write(stage+"/"+rel, bytes.NewReader(b), int64(len(b)), digest(b)); e != nil {
 			return false, e
 		}

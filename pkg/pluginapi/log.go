@@ -30,7 +30,7 @@ func (h redactingHandler) text(s string) string {
 	for _, secret := range h.secrets {
 		s = strings.ReplaceAll(s, secret, "[redacted]")
 	}
-	return s
+	return Redact(s)
 }
 func (h redactingHandler) attr(a slog.Attr) slog.Attr {
 	a.Key = h.text(a.Key)
