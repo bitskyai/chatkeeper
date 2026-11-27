@@ -130,7 +130,7 @@ func (Hooks) Reactions(_ context.Context, m pluginapi.Message) ([]pluginapi.Reac
 	}
 	out := []pluginapi.ReactionView{}
 	for _, r := range root.Reactions {
-		out = append(out, pluginapi.ReactionView{Name: r.Name, Glyph: Glyph(r.Name), Count: r.Count})
+		out = append(out, pluginapi.ReactionView{Name: r.Name, Glyph: Glyph(r.Name), Count: r.Count, MatchNames: []string{r.Name, baseReaction(r.Name)}})
 	}
 	return out, nil
 }

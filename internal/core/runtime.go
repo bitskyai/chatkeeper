@@ -273,12 +273,33 @@ func (r *Runtime) backfill(ctx context.Context, s pluginapi.Session, trace *Chec
 			r.inspectReplies(ctx, s, roots, trace)
 		}
 		candidates += len(set)
-		for _, k := range append(keys, repairKeys...) {
+		for _, k := range keys {
 			if err := ctx.Err(); err != nil {
 				return changed, err
 			}
 			if k.Channel == channel {
 				set[k] = true
+			}
+		}
+		// Overflow repair must re-read reply authority too: history only carries root reactions.
+		for _, event := range repairKeys {
+			if event.Channel != channel || event.ItemTS == "" {
+				continue
+			}
+			k := pluginapi.Key{Channel: event.Channel, RootTS: event.RootTS}
+			ok, err := r.refresh(ctx, s, k, event.ItemTS)
+			if fatal(err) {
+				return changed, err
+			}
+			if err != nil {
+				lastErr = err
+			} else if ok {
+				changed++
+			}
+		}
+		for _, event := range repairKeys {
+			if event.Channel == channel && event.ItemTS == "" {
+				set[pluginapi.Key{Channel: event.Channel, RootTS: event.RootTS}] = true
 			}
 		}
 		for k := range set {

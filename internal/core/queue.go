@@ -6,14 +6,19 @@ import (
 	"sync"
 )
 
-// Queue bounds unique pending keys; hints coalesce and reactions take priority.
+type pendingKey struct {
+	pluginapi.Key
+	ItemTS string
+}
+
+// Queue bounds unique pending candidates; hints coalesce and reactions take priority.
 type Queue struct {
 	mu         sync.Mutex
 	limit      int
-	order      []pluginapi.Key
-	pending    map[pluginapi.Key]pluginapi.Event
+	order      []pendingKey
+	pending    map[pendingKey]pluginapi.Event
 	wake       chan struct{}
-	dirty      map[pluginapi.Key]bool
+	dirty      map[pendingKey]pluginapi.Event
 	generation uint64
 }
 
@@ -21,37 +26,33 @@ func NewQueue(limit int) *Queue {
 	if limit < 1 {
 		limit = 1
 	}
-	return &Queue{limit: limit, pending: map[pluginapi.Key]pluginapi.Event{}, dirty: map[pluginapi.Key]bool{}, wake: make(chan struct{}, 1)}
+	return &Queue{limit: limit, pending: map[pendingKey]pluginapi.Event{}, dirty: map[pendingKey]pluginapi.Event{}, wake: make(chan struct{}, 1)}
 }
 func (q *Queue) Push(e pluginapi.Event) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	k := pluginapi.Key{Channel: e.Channel, RootTS: e.RootTS}
+	k := pendingKey{Key: pluginapi.Key{Channel: e.Channel, RootTS: e.RootTS}, ItemTS: e.ItemTS}
 	if e.Kind == "backfill" {
-		k = pluginapi.Key{}
+		k = pendingKey{}
 	}
 	if old, ok := q.pending[k]; ok {
 		if old.Kind == "reaction" && e.Kind != "reaction" {
 			return true
 		}
-		if e.ItemTS == "" && old.Kind == "reaction" {
-			// Keep the reply that a coalesced reaction event pointed at.
-			e.ItemTS = old.ItemTS
-		}
 	} else {
 		ordinary := len(q.pending)
-		if _, ok := q.pending[pluginapi.Key{}]; ok {
+		if _, ok := q.pending[pendingKey{}]; ok {
 			ordinary--
 		}
 		if e.Kind != "backfill" && ordinary >= q.limit {
 			q.generation++
 			if len(q.dirty) < q.limit {
-				q.dirty[k] = true
+				q.dirty[k] = e
 			}
 			// Reserve one extra slot for a repair sweep even under distinct floods.
-			if _, ok := q.pending[pluginapi.Key{}]; !ok {
-				q.pending[pluginapi.Key{}] = pluginapi.Event{Kind: "backfill"}
-				q.order = append(q.order, pluginapi.Key{})
+			if _, ok := q.pending[pendingKey{}]; !ok {
+				q.pending[pendingKey{}] = pluginapi.Event{Kind: "backfill"}
+				q.order = append(q.order, pendingKey{})
 			}
 			select {
 			case q.wake <- struct{}{}:
@@ -93,13 +94,15 @@ func (q *Queue) Pop(ctx context.Context) (pluginapi.Event, error) {
 }
 
 // Repairs returns bounded dropped-key hints plus a generation. Any overflow is
-// covered by a full history sweep; concurrent drops keep the dirty state alive.
-func (q *Queue) Repairs() ([]pluginapi.Key, uint64) {
+// covered by a full history sweep and bounded reply hints. Beyond the hint bound,
+// reply-only triggers require another live event; root history cannot recover them.
+// Concurrent drops keep the dirty state alive.
+func (q *Queue) Repairs() ([]pluginapi.Event, uint64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	keys := []pluginapi.Key{}
-	for k := range q.dirty {
-		keys = append(keys, k)
+	keys := []pluginapi.Event{}
+	for _, event := range q.dirty {
+		keys = append(keys, event)
 	}
 	return keys, q.generation
 }
@@ -107,7 +110,7 @@ func (q *Queue) Repaired(generation uint64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.generation == generation {
-		q.dirty = map[pluginapi.Key]bool{}
+		q.dirty = map[pendingKey]pluginapi.Event{}
 		q.generation = 0
 	}
 }

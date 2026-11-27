@@ -887,6 +887,11 @@ func (a *App) redactPage(p *page, creds pluginapi.Credentials) {
 		if secret == "" {
 			continue
 		}
+		// Diagnostics contain source-supplied workspace and user labels too.
+		for i := range p.Checks {
+			p.Checks[i].Label = strings.ReplaceAll(p.Checks[i].Label, secret, "[redacted]")
+			p.Checks[i].Detail = strings.ReplaceAll(p.Checks[i].Detail, secret, "[redacted]")
+		}
 		p.Body = strings.ReplaceAll(p.Body, secret, "[redacted]")
 		p.Error = strings.ReplaceAll(p.Error, secret, "[redacted]")
 		for i := range p.Messages {

@@ -178,3 +178,31 @@ func TestCheckNowFailsFastWhenNotRunning(t *testing.T) {
 		t.Fatalf("%+v", report)
 	}
 }
+
+type replyCandidateSession struct{ *fixtureSession }
+
+func (s replyCandidateSession) Root(context.Context, string, string) (pluginapi.Root, error) {
+	return pluginapi.Root{TS: "100.000001"}, nil
+}
+func (s replyCandidateSession) History(context.Context, string, string) ([]pluginapi.RootRef, error) {
+	return nil, nil
+}
+func (s replyCandidateSession) Item(_ context.Context, _ string, root, item string) (pluginapi.Root, error) {
+	return pluginapi.Root{TS: item, ThreadTS: root, Reactions: []pluginapi.Reaction{{Name: "mark", Count: 1}}}, nil
+}
+func TestOverflowRepairRetainsReplyCandidate(t *testing.T) {
+	base := &fixtureSession{mode: "poll"}
+	r := makeRuntime(t, base, fixtureHooks{})
+	r.Queue = NewQueue(1)
+	r.Queue.Push(pluginapi.Event{Channel: "CFIXTURE", RootTS: "200.000001", Kind: "reaction"})
+	if r.Queue.Push(pluginapi.Event{Channel: "CFIXTURE", RootTS: "100.000001", Kind: "reaction", ItemTS: "101.000001"}) {
+		t.Fatal("expected overflow")
+	}
+	if _, err := r.Backfill(context.Background(), replyCandidateSession{base}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := r.Store.Read(context.Background(), pluginapi.Key{Channel: "CFIXTURE", RootTS: "100.000001"})
+	if err != nil || snap == nil {
+		t.Fatal("reply trigger lost during overflow repair", err)
+	}
+}

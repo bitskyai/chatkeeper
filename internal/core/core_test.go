@@ -101,7 +101,27 @@ func TestQueueKeepsReplyItemWhenCoalescing(t *testing.T) {
 	q.Push(pluginapi.Event{Channel: "C1", RootTS: "1.0", Kind: "reaction", ItemTS: "2.0"})
 	q.Push(pluginapi.Event{Channel: "C1", RootTS: "1.0", Kind: "reaction"})
 	e, err := q.Pop(context.Background())
-	if err != nil || e.ItemTS != "2.0" || q.Len() != 0 {
+	if err != nil || e.ItemTS != "2.0" || q.Len() != 1 {
 		t.Fatal(e, err)
+	}
+}
+
+func TestQueuePreservesDistinctReplyCandidates(t *testing.T) {
+	q := NewQueue(4)
+	for _, item := range []string{"2.0", "3.0", "2.0"} {
+		q.Push(pluginapi.Event{Channel: "C1", RootTS: "1.0", Kind: "reaction", ItemTS: item})
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	seen := map[string]bool{}
+	for q.Len() > 0 {
+		e, err := q.Pop(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen[e.ItemTS] = true
+	}
+	if !seen["2.0"] || !seen["3.0"] || len(seen) != 2 {
+		t.Fatal("reply candidates overwritten", seen)
 	}
 }

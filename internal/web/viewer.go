@@ -200,6 +200,9 @@ func (v *Viewer) serveHTTP(w http.ResponseWriter, r *http.Request, sources map[s
 					trigger := false
 					for _, name := range source.Triggers {
 						trigger = trigger || name == rv.Name
+						for _, match := range rv.MatchNames {
+							trigger = trigger || name == match
+						}
 					}
 					msg.Reactions = append(msg.Reactions, reactionView{Name: rv.Name, Glyph: rv.Glyph, Count: rv.Count, Trigger: trigger})
 				}

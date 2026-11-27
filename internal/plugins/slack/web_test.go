@@ -303,3 +303,30 @@ func TestFoldTones(t *testing.T) {
 		}
 	}
 }
+
+func TestRetryAfterNeverShortenedOrOverflowed(t *testing.T) {
+	for _, header := range []string{"600", "9223372036854775807"} {
+		t.Run(header, func(t *testing.T) {
+			token := "xoxb-synthetic-long-cooldown-" + header
+			defer cooldowns.Delete(cooldownKey(token))
+			calls := 0
+			c := NewClient(token, &http.Client{Transport: route(func(*http.Request) (*http.Response, error) {
+				calls++
+				res := response(429, "")
+				res.Header.Set("Retry-After", header)
+				return res, nil
+			})})
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if _, err := c.Call(ctx, "conversations.history", nil); !errors.Is(err, errRateLimited) {
+				t.Fatal(err)
+			}
+			if left := c.cooldown(); left < 599*time.Second {
+				t.Fatalf("server cooldown shortened: %v", left)
+			}
+			if calls != 1 {
+				t.Fatal("retried within cooldown", calls)
+			}
+		})
+	}
+}

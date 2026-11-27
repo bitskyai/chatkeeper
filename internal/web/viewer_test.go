@@ -285,3 +285,58 @@ func TestViewerLabelsSourceDeletedMessage(t *testing.T) {
 		t.Fatal("label must apply only to deleted message")
 	}
 }
+
+// Exact-only viewer matching used to omit the marker for a toned reaction.
+func TestViewerSkinToneTrigger(t *testing.T) {
+	ctx := context.Background()
+	src, err := storage.Open("../storage/testdata/golden")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	key := pluginapi.Key{Channel: "CFIXTURE", RootTS: "100.000001"}
+	snapshot, err := src.Read(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot.Documents = nil
+	snapshot.Messages[0]["reactions"] = []any{map[string]any{"name": "+1::skin-tone-3", "count": 1, "users": []any{"UOWNER"}}}
+	store, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err = store.Save(ctx, key, *snapshot); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		trigger string
+		marked  bool
+	}{{"+1", true}, {"+1::skin-tone-3", true}, {"+1::skin-tone-2", false}, {"bookmark", false}} {
+		t.Run(tc.trigger, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			New(map[string]Source{"fixture": {Store: store, Content: slack.Hooks{}, Triggers: []string{tc.trigger}}}, "").ServeHTTP(w, httptest.NewRequest("GET", "/view/fixture/CFIXTURE/100.000001", nil))
+			if w.Code != 200 {
+				t.Fatal(w.Code, w.Body.String())
+			}
+			if got := strings.Contains(w.Body.String(), `class="reaction trigger"`); got != tc.marked {
+				t.Fatalf("trigger marker=%v want %v: %s", got, tc.marked, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestConnectionChecksRedactCredentials(t *testing.T) {
+	const secret = "xoxb-synthetic-never-render"
+	pg := page{Kind: "step", Title: "Connection", Checks: []pluginapi.Check{{Label: "Workspace " + secret, Detail: "API returned " + secret, OK: true}}}
+	app := &App{}
+	app.redactPage(&pg, pluginapi.Credentials{"bot_token": secret})
+	w := httptest.NewRecorder()
+	app.render(w, pg)
+	if strings.Contains(w.Body.String(), secret) {
+		t.Fatal("connection diagnostics echoed credential", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "[redacted]") {
+		t.Fatal("diagnostics were omitted instead of redacted")
+	}
+}

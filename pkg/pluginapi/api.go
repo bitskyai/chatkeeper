@@ -232,7 +232,9 @@ type Check struct {
 // ReactionView describes a stored reaction for display.
 type ReactionView struct {
 	Name, Glyph, Image string
-	Count              int
+	// MatchNames are trigger names that match this reaction, supplied by the platform.
+	MatchNames []string
+	Count      int
 }
 
 // ReactionRenderer is an optional ContentHooks extension for viewers.

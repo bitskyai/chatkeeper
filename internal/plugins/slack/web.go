@@ -57,7 +57,7 @@ var errRateLimited = errors.New("API rate limited; waiting for Retry-After befor
 var cooldowns sync.Map
 
 const defaultCooldown = 60 * time.Second
-const maxCooldown = 300 * time.Second
+const maxCooldown = time.Duration(1<<63 - 1)
 
 func cooldownKey(token string) string { return sha([]byte(token)) }
 func (c *Client) cooldown() time.Duration {
@@ -83,7 +83,7 @@ func (c *Client) waitCooldown(ctx context.Context) error {
 	if wait <= 0 {
 		return nil
 	}
-	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < wait+time.Second {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline)-time.Second < wait {
 		return errRateLimited
 	}
 	select {
@@ -130,11 +130,14 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 		if res.StatusCode == 429 {
 			res.Body.Close()
 			seconds, e := strconv.Atoi(res.Header.Get("Retry-After"))
-			wait := time.Duration(seconds) * time.Second
-			if e != nil || seconds < 0 {
-				wait = defaultCooldown
+			wait := defaultCooldown
+			if e == nil && seconds >= 0 {
+				// Clamp before multiplication to avoid overflow; never shorten a valid wait.
+				wait = maxCooldown
+				if uint64(seconds) <= uint64(maxCooldown/time.Second) {
+					wait = time.Duration(seconds) * time.Second
+				}
 			}
-			wait = min(wait, maxCooldown)
 			c.coolUntil(wait)
 			if retries >= 3 {
 				return nil, errRateLimited
