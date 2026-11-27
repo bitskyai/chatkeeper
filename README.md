@@ -124,7 +124,9 @@ Back up the volume before upgrades; keep only one writer per archive.
 To build from source, use Go 1.26+: `go build -trimpath -o chatkeeper ./cmd/chatkeeper`.
 The Slack plugin vendors standard emoji short names and glyphs generated from
 [iamcal/emoji-data](https://github.com/iamcal/emoji-data) (MIT, see
-`internal/plugins/slack/emoji/LICENSE`; regenerate with `tools/generate-emoji.py`).
+`internal/plugins/slack/emoji/LICENSE`). The source commit and SHA-256 are pinned
+in `tools/generate-emoji.py` and `internal/plugins/slack/emoji/NOTICE`; the
+generator refuses an input whose hash differs.
 To build a container: `docker build -t chatkeeper:local .` (BuildKit required).
 
 ## Slack app setup
@@ -146,7 +148,14 @@ The wizard guides these steps and checks credentials before saving a workspace:
 3. Invite the bot to each watched channel, including private channels, then
    select channels and one or more reactions. Every step has **Back**; entered
    values are kept and secrets stay server-side (shown as saved).
-4. Add a selected reaction to a thread's **first message**. The wizard writes
+4. Add a selected reaction to a thread. With Socket Mode connected, a reaction
+   on **any message in the thread** (the first message or a reply) archives the
+   whole thread: ChatKeeper maps the reacted reply to its thread root with one
+   cached `conversations.replies` read. Polling reads only reactions on the
+   **first message** (one history read per channel per poll), so in polling-only
+   mode, or for a reply reaction added while Socket Mode was disconnected, react
+   on the first message. Skin tones count: `+1` matches `+1::skin-tone-N` of any
+   tone; configure `+1::skin-tone-3` to require one tone. The wizard writes
    `trigger.match: any`; without `match` (or with `match: all`) every listed
    reaction must be on the root, as in earlier releases. An owner rule requires a
    selected owner to supply the matching reactions. Removing a trigger stops
@@ -158,6 +167,8 @@ The wizard guides these steps and checks credentials before saving a workspace:
 Polling also runs with Socket Mode and repairs missed events. Each poll rescans
 thread roots posted in the last 24 hours, because a reaction can land on an
 older root at any time; a full history scan runs hourly and on **Check now**.
+When Slack answers HTTP 429, its `Retry-After` is honored across polls and
+reconnects: reads pause until the cooldown ends instead of retrying early.
 
 For managed YAML, copy [examples/config.yaml](examples/config.yaml) and replace
 synthetic IDs and credential environment names. Storage paths resolve relative to

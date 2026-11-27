@@ -95,3 +95,13 @@ func TestBackfillReservedUnderDistinctFlood(t *testing.T) {
 		t.Fatal("backfill refused under flood")
 	}
 }
+
+func TestQueueKeepsReplyItemWhenCoalescing(t *testing.T) {
+	q := NewQueue(4)
+	q.Push(pluginapi.Event{Channel: "C1", RootTS: "1.0", Kind: "reaction", ItemTS: "2.0"})
+	q.Push(pluginapi.Event{Channel: "C1", RootTS: "1.0", Kind: "reaction"})
+	e, err := q.Pop(context.Background())
+	if err != nil || e.ItemTS != "2.0" || q.Len() != 0 {
+		t.Fatal(e, err)
+	}
+}

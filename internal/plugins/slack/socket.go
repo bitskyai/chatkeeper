@@ -79,6 +79,9 @@ func (s *Session) listen(ctx context.Context, sink pluginapi.EventSink) error {
 			continue
 		}
 		event := Event(payload.Event)
+		if event.Kind == "reaction" && s.triggers[baseReaction(str(payload.Event["reaction"]))] {
+			event = s.reactionRoot(ctx, event)
+		}
 		if event.Kind != "" {
 			sink(event)
 		}
@@ -105,4 +108,15 @@ func (s *Session) Start(ctx context.Context, sink pluginapi.EventSink) error {
 		delay = min(delay*2, 30*time.Second)
 	}
 	return ctx.Err()
+}
+
+// reactionRoot maps a trigger reaction on a thread reply to its root so the
+// runtime can archive the thread. Slack's reaction events name only the
+// reacted message; on lookup failure the event is passed through unchanged.
+func (s *Session) reactionRoot(ctx context.Context, event pluginapi.Event) pluginapi.Event {
+	root, e := s.threadRoot(ctx, event.Channel, event.RootTS)
+	if e != nil || root == event.RootTS {
+		return event
+	}
+	return pluginapi.Event{Channel: event.Channel, RootTS: root, Kind: event.Kind, ItemTS: event.RootTS}
 }

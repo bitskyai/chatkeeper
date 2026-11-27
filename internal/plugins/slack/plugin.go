@@ -82,7 +82,9 @@ func (Plugin) ParseWorkspace(_ context.Context, raw json.RawMessage, creds plugi
 	return pluginapi.Settings(append([]byte{}, raw...)), nil
 }
 
-var reactionPattern = regexp.MustCompile(`^[a-zA-Z0-9_+\-]{1,100}$`)
+// reactionPattern accepts emoji short names, optionally with a skin tone
+// ("+1::skin-tone-3" matches only that tone; "+1" matches every tone).
+var reactionPattern = regexp.MustCompile(`^[a-zA-Z0-9_+\-]{1,100}(::skin-tone-[2-6])?$`)
 
 func patternsCode() *regexp.Regexp                                            { return regexp.MustCompile(`^[a-z_]{1,64}$`) }
 func (Plugin) ValidateWorkspaces(context.Context, []pluginapi.Settings) error { return nil }
@@ -91,5 +93,9 @@ func (Plugin) NewSession(_ context.Context, ws pluginapi.Workspace, env pluginap
 	if json.Unmarshal(ws.Settings, &m) != nil || !id(m["team_id"], "team") || !validToken(env.Credentials["bot_token"], "xoxb-") {
 		return nil, pluginapi.ErrInvalid
 	}
-	return &Session{client: NewClient(env.Credentials["bot_token"], env.HTTP), team: str(m["team_id"]), appToken: env.Credentials["app_token"]}, nil
+	triggers := map[string]bool{}
+	for _, name := range ws.Trigger.Reactions {
+		triggers[baseReaction(name)] = true
+	}
+	return &Session{client: NewClient(env.Credentials["bot_token"], env.HTTP), team: str(m["team_id"]), appToken: env.Credentials["app_token"], triggers: triggers}, nil
 }

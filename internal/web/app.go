@@ -101,7 +101,7 @@ type workspaceRow struct {
 type page struct {
 	Title, Kind, Body, CSRF, Error, Storage, Workspace, Reaction string
 	Step, Steps                                                  int
-	CanBack, CanTest, Tested                                     bool
+	CanBack, CanTest, Tested, Locked, Live                       bool
 	Skip, ImageOrigins, Transport                                string
 	Checks                                                       []pluginapi.Check
 	Report                                                       *core.CheckReport
@@ -925,6 +925,12 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 	if wid == "" {
 		wid = "workspace"
 	}
+	// Once this wizard has saved a workspace its name is fixed: a different
+	// name after Back would save a second workspace with the same credentials.
+	locked := z.Workspace != ""
+	if locked {
+		wid = z.Workspace
+	}
 	root := filepath.Join(a.opts.Home, "data")
 	if a.opts.Mode == "desktop" {
 		if home, e := os.UserHomeDir(); e == nil {
@@ -935,14 +941,14 @@ func (a *App) storageStep(w http.ResponseWriter, r *http.Request, id, csrf strin
 	if storagePath == "" {
 		storagePath = filepath.Join(root, wid)
 	}
-	if r.Method == "GET" && z.Workspace != "" && r.FormValue("workspace") == "" {
+	if r.Method == "GET" && locked {
 		for _, running := range a.Manager.List() {
 			if running.Entry.Workspace.ID == z.Workspace {
 				wid, storagePath = z.Workspace, running.Entry.Workspace.Storage
 			}
 		}
 	}
-	pg := page{Title: "Where should we save your threads?", Kind: "storage", CSRF: csrf, Storage: storagePath, Workspace: wid, Managed: !config.Writable(a.opts.Config), CanBack: true}
+	pg := page{Title: "Where should we save your threads?", Kind: "storage", CSRF: csrf, Storage: storagePath, Workspace: wid, Managed: !config.Writable(a.opts.Config), CanBack: true, Locked: locked}
 	if r.Method == "POST" {
 		exists := false
 		for _, running := range a.Manager.List() {
@@ -1105,6 +1111,7 @@ func (a *App) live(w http.ResponseWriter, r *http.Request, csrf string, z *wizar
 			continue
 		}
 		pg.Transport = transportLabel(running)
+		pg.Live = running.Runtime.Health().Realtime
 		pg.Activity = running.Runtime.Activity()
 		if len(pg.Activity) > 8 {
 			pg.Activity = pg.Activity[:8]

@@ -74,6 +74,28 @@ func (r *Runtime) now() time.Time {
 	return time.Now()
 }
 func (r *Runtime) Refresh(ctx context.Context, s pluginapi.Session, k pluginapi.Key) (bool, error) {
+	return r.refresh(ctx, s, k, "")
+}
+
+// triggered applies the rule to the root and, for a realtime reaction on a
+// reply (item), to that reply as re-read from the source. Polling passes no
+// item, so it only ever matches reactions on the root.
+func (r *Runtime) triggered(ctx context.Context, s pluginapi.Session, k pluginapi.Key, item string, root pluginapi.Root) (bool, error) {
+	matched, e := Matches(r.Workspace.Trigger, root)
+	if e != nil || matched || item == "" || item == k.RootTS {
+		return matched, e
+	}
+	reader, ok := s.(pluginapi.ItemReader)
+	if !ok {
+		return false, nil
+	}
+	reply, e := Call(ctx, r.HookTimeout, func(c context.Context) (pluginapi.Root, error) { return reader.Item(c, k.Channel, k.RootTS, item) })
+	if e != nil || reply.TS != item {
+		return false, e
+	}
+	return Matches(r.Workspace.Trigger, pluginapi.Root{TS: k.RootTS, Reactions: reply.Reactions})
+}
+func (r *Runtime) refresh(ctx context.Context, s pluginapi.Session, k pluginapi.Key, item string) (bool, error) {
 	root, e := Call(ctx, r.HookTimeout, func(c context.Context) (pluginapi.Root, error) { return s.Root(c, k.Channel, k.RootTS) })
 	if e != nil {
 		return false, e
@@ -85,7 +107,7 @@ func (r *Runtime) Refresh(ctx context.Context, s pluginapi.Session, k pluginapi.
 	if root.TS == "" {
 		return r.observeMissing(ctx, k, previous)
 	}
-	matched, e := Matches(r.Workspace.Trigger, root)
+	matched, e := r.triggered(ctx, s, k, item, root)
 	if e != nil {
 		return false, e
 	}
@@ -108,7 +130,7 @@ func (r *Runtime) Refresh(ctx context.Context, s pluginapi.Session, k pluginapi.
 	if root.TS == "" {
 		return r.observeMissing(ctx, k, previous)
 	}
-	matched, e = Matches(r.Workspace.Trigger, root)
+	matched, e = r.triggered(ctx, s, k, item, root)
 	if e != nil {
 		return false, e
 	}
@@ -430,7 +452,7 @@ func (r *Runtime) runOnce(ctx context.Context) error {
 			if !r.active[key.Channel] || event.Kind != "reaction" && !r.marked[key] {
 				continue
 			}
-			_, e = r.Refresh(child, s, key)
+			_, e = r.refresh(child, s, key, event.ItemTS)
 		}
 		if fatal(e) {
 			return e

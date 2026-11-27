@@ -146,7 +146,7 @@ func TestWizardBackTestSkipPickerAndCheckNow(t *testing.T) {
 	c.expect("Where should we save your threads?", "← Back")
 	storage := filepath.Join(home, "data", "fixture")
 	c.do("POST", "/setup/step", url.Values{"workspace": {"fixture"}, "storage": {storage}})
-	c.expect("Try your first archive", ":wastebasket: or :fixture_parrot:", "Polling only", "Check now")
+	c.expect("Try your first archive", ":wastebasket: or :fixture_parrot:", "Polling only", "Check now", "Reactions on replies need live events")
 
 	cfg, e := config.LoadWithResolver(cfgPath, true, func(k string) string { v, _, _ := a.Secrets.Get(k); return v })
 	if e != nil || len(cfg.Workspaces) != 1 {
@@ -162,17 +162,26 @@ func TestWizardBackTestSkipPickerAndCheckNow(t *testing.T) {
 	fake.MarkReply(true)
 	waitRunning(t, a)
 	c.do("POST", "/setup/check", nil)
-	c.expect("Try your first archive", "#fixture", "CFIXTURE", "bot is a member", "thread roots scanned", "on a reply (101.000001)", "Live events are off (polling only)")
+	c.expect("Try your first archive", "#fixture", "CFIXTURE", "bot is a member", "thread roots scanned", "on a reply (101.000001)", "Polling only reads reactions on the first message of a thread", "Live events are off (polling only)", "first message of each thread only")
 	fake.MarkReply(false)
 	fake.Mark(true)
 	c.do("POST", "/setup/check", nil)
 	c.expect("Your first thread is saved!", ":fixture_parrot: ×1", "archived", "Recent capture events")
 	// Back from the live page returns to storage with the saved values.
 	c.do("POST", "/setup/back", nil)
-	c.expect("Where should we save your threads?", `value="fixture"`)
-	c.do("POST", "/setup/step", url.Values{"workspace": {"fixture"}, "storage": {storage}})
+	c.expect("Where should we save your threads?", `value="fixture"`, "readonly", "cannot change after saving")
+	// A different name submitted after Back must not create a second workspace
+	// sharing the same credentials (duplicate capture workers).
+	c.do("POST", "/setup/step", url.Values{"workspace": {"renamed"}, "storage": {storage}})
 	if !strings.Contains(c.body, `id="check-now"`) {
 		t.Fatal("re-saving the same workspace did not return to the live test")
+	}
+	cfg, e = config.LoadWithResolver(cfgPath, true, func(k string) string { v, _, _ := a.Secrets.Get(k); return v })
+	if e != nil || len(cfg.Workspaces) != 1 || cfg.Workspaces[0].Workspace.ID != "fixture" {
+		t.Fatalf("rename after Back duplicated the workspace: %+v %v", cfg, e)
+	}
+	if n := len(a.Manager.List()); n != 1 {
+		t.Fatalf("want 1 capture worker, got %d", n)
 	}
 	c.do("POST", "/setup/finish", nil)
 	c.expect("Your threads, kept safe", "Recent capture events", "Archived thread CFIXTURE / 100.000001", "Polling only")

@@ -342,7 +342,11 @@ func (c *CheckReport) hints() {
 		if matchedRoots[reply.Channel+"/"+reply.RootTS] {
 			continue
 		}
-		add("Found :%s: on a reply (%s) in thread %s. Only reactions on the first message of a thread count; add it there.", reply.Name, reply.TS, reply.RootTS)
+		if c.Realtime {
+			add("Found :%s: on a reply (%s) in thread %s. Live events archive a thread when a trigger reaction is added to a reply, but this scan only reads reactions on the first message. If live events were disconnected when it was added, remove and re-add it, or add it to the first message.", reply.Name, reply.TS, reply.RootTS)
+		} else {
+			add("Found :%s: on a reply (%s) in thread %s. Polling only reads reactions on the first message of a thread; add it there, or enable live events to archive from reply reactions.", reply.Name, reply.TS, reply.RootTS)
+		}
 	}
 	if !triggered && len(c.Channels) > 0 && len(c.Replies) == 0 {
 		if len(otherNames) > 0 {
@@ -361,8 +365,10 @@ func (c *CheckReport) hints() {
 		if !c.NextPoll.IsZero() {
 			next = fmt.Sprintf(" The last automatic check ran at %s; the next is due around %s.", c.LastPoll.UTC().Format(time.TimeOnly+" UTC"), c.NextPoll.UTC().Format(time.TimeOnly+" UTC"))
 		}
-		add("Live events are off (polling only): automatic checks run every %s.%s Check now scans immediately.", c.Interval, next)
+		add("Live events are off (polling only): automatic checks run every %s and read reactions on the first message of each thread only.%s Check now scans immediately.", c.Interval, next)
 	} else if !c.RealtimeConnected && c.RealtimeDetail != "" {
-		add("Live events are configured but not connected: %s Polling still runs every %s.", c.RealtimeDetail, c.Interval)
+		add("Live events are configured but not connected: %s Polling still runs every %s (first-message reactions only).", c.RealtimeDetail, c.Interval)
+	} else {
+		add("Live events are connected: a trigger reaction on any message in a thread, including replies, archives it as soon as it is added. Polling every %s re-checks reactions on first messages only.", c.Interval)
 	}
 }

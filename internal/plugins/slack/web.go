@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,7 +24,6 @@ const maxFile int64 = 100 << 20
 const maxSnapshot int64 = 512 << 20
 
 var errAPI = errors.New("API read failed")
-var errRateLimited = errors.New("API read rate limit exhausted")
 
 type apiError struct{ code string }
 
@@ -47,9 +47,58 @@ func NewClient(token string, transport *http.Client) *Client {
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{token: token, http: &c}
 }
+
+// errRateLimited is returned while an API Retry-After cooldown is in effect and
+// the caller cannot wait that long; the next poll tries again.
+var errRateLimited = errors.New("API rate limited; waiting for Retry-After before the next read")
+
+// cooldowns remembers 429 Retry-After deadlines per token so they are honored
+// across polls and across session restarts, not only within one request.
+var cooldowns sync.Map
+
+const defaultCooldown = 60 * time.Second
+const maxCooldown = 300 * time.Second
+
+func cooldownKey(token string) string { return sha([]byte(token)) }
+func (c *Client) cooldown() time.Duration {
+	v, ok := cooldowns.Load(cooldownKey(c.token))
+	if !ok {
+		return 0
+	}
+	return time.Until(v.(time.Time))
+}
+func (c *Client) coolUntil(wait time.Duration) {
+	until := time.Now().Add(wait)
+	key := cooldownKey(c.token)
+	if v, ok := cooldowns.Load(key); ok && v.(time.Time).After(until) {
+		return
+	}
+	cooldowns.Store(key, until)
+}
+
+// waitCooldown sleeps through an active cooldown when the context allows it,
+// and fails fast otherwise so a poll never stalls into a hook timeout.
+func (c *Client) waitCooldown(ctx context.Context) error {
+	wait := c.cooldown()
+	if wait <= 0 {
+		return nil
+	}
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < wait+time.Second {
+		return errRateLimited
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(wait):
+		return nil
+	}
+}
 func (c *Client) get(ctx context.Context, method, rawURL, token string, limit int64, file bool) ([]byte, error) {
 	retries, redirects := 0, 0
 	for {
+		if e := c.waitCooldown(ctx); e != nil {
+			return nil, e
+		}
 		if file && (redirects == 0 && FileURL(rawURL) != nil || redirects > 0 && fileRedirectURL(rawURL) != nil) {
 			return nil, pluginapi.ErrInvalid
 		}
@@ -78,23 +127,20 @@ func (c *Client) get(ctx context.Context, method, rawURL, token string, limit in
 		if e != nil {
 			return nil, errAPI
 		}
-		if res.StatusCode == 429 && retries < 3 {
+		if res.StatusCode == 429 {
 			res.Body.Close()
-			wait, e := strconv.Atoi(res.Header.Get("Retry-After"))
-			if e != nil || wait < 0 || wait > 300 {
+			seconds, e := strconv.Atoi(res.Header.Get("Retry-After"))
+			wait := time.Duration(seconds) * time.Second
+			if e != nil || seconds < 0 {
+				wait = defaultCooldown
+			}
+			wait = min(wait, maxCooldown)
+			c.coolUntil(wait)
+			if retries >= 3 {
 				return nil, errRateLimited
 			}
 			retries++
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(time.Duration(wait) * time.Second):
-			}
 			continue
-		}
-		if res.StatusCode == 429 {
-			res.Body.Close()
-			return nil, errRateLimited
 		}
 		if file && res.StatusCode >= 300 && res.StatusCode < 400 {
 			res.Body.Close()
@@ -163,6 +209,97 @@ type Session struct {
 	client         *Client
 	team, appToken string
 	live           liveState
+	// triggers are the configured reaction names (tone suffixes folded) used
+	// to decide which realtime reaction events are worth a thread-root lookup.
+	triggers map[string]bool
+	roots    rootCache
+}
+
+// rootCache maps a reacted message to its thread root, bounded in size.
+type rootCache struct {
+	mu sync.Mutex
+	m  map[string]string
+}
+
+const maxRootCache = 4096
+
+func (c *rootCache) get(k string) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	v, ok := c.m[k]
+	return v, ok
+}
+func (c *rootCache) put(k, v string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.m == nil || len(c.m) >= maxRootCache {
+		c.m = map[string]string{}
+	}
+	c.m[k] = v
+}
+
+// skinTone matches Slack's tone-modified reaction names, e.g. "+1::skin-tone-3".
+var skinTone = regexp.MustCompile(`^(.+)::skin-tone-[2-6]$`)
+
+// baseReaction strips a skin-tone suffix.
+func baseReaction(name string) string {
+	if m := skinTone.FindStringSubmatch(name); m != nil {
+		return m[1]
+	}
+	return name
+}
+
+// foldTones adds, for every tone-modified reaction, its base name carrying the
+// combined users and counts, so a configured "+1" matches any tone while a
+// configured "+1::skin-tone-3" still matches only that tone.
+func foldTones(reactions []pluginapi.Reaction) []pluginapi.Reaction {
+	index := map[string]int{}
+	for i, r := range reactions {
+		index[r.Name] = i
+	}
+	out := append([]pluginapi.Reaction{}, reactions...)
+	type agg struct {
+		users []string
+		seen  map[string]bool
+		extra int
+	}
+	folded := map[string]*agg{}
+	order := []string{}
+	add := func(base string, r pluginapi.Reaction) {
+		a := folded[base]
+		if a == nil {
+			a = &agg{seen: map[string]bool{}}
+			folded[base] = a
+			order = append(order, base)
+		}
+		for _, u := range r.Users {
+			if !a.seen[u] {
+				a.seen[u] = true
+				a.users = append(a.users, u)
+			}
+		}
+		a.extra += max(0, r.Count-len(r.Users))
+	}
+	for _, r := range reactions {
+		if base := baseReaction(r.Name); base != r.Name {
+			if _, ok := folded[base]; !ok {
+				if i, has := index[base]; has {
+					add(base, reactions[i])
+				}
+			}
+			add(base, r)
+		}
+	}
+	for _, base := range order {
+		a := folded[base]
+		merged := pluginapi.Reaction{Name: base, Users: a.users, Count: len(a.users) + a.extra}
+		if i, has := index[base]; has {
+			out[i] = merged
+		} else {
+			out = append(out, merged)
+		}
+	}
+	return out
 }
 
 // liveState is the Socket Mode connection status shown by diagnostics.
@@ -245,7 +382,7 @@ func (s *Session) ReplyReactions(ctx context.Context, roots []pluginapi.RootRef,
 			if e != nil {
 				continue
 			}
-			for _, r := range reply.Reactions {
+			for _, r := range foldTones(reply.Reactions) {
 				if want[r.Name] {
 					out = append(out, pluginapi.ReplyReaction{Channel: root.Channel, RootTS: root.RootTS, TS: str(m["ts"]), Name: r.Name})
 				}
@@ -411,7 +548,7 @@ func (s *Session) History(ctx context.Context, channel, oldest string) ([]plugin
 			return nil, e
 		}
 		replies, _ := integer(m["reply_count"])
-		out = append(out, pluginapi.RootRef{Channel: channel, RootTS: ts, Reactions: root.Reactions, Replies: int(replies)})
+		out = append(out, pluginapi.RootRef{Channel: channel, RootTS: ts, Reactions: foldTones(root.Reactions), Replies: int(replies)})
 	}
 	return out, nil
 }
@@ -431,7 +568,65 @@ func (s *Session) Root(ctx context.Context, channel, ts string) (pluginapi.Root,
 	if !ok || doc["type"] != "message" || doc["channel"] != channel || m["ts"] != ts {
 		return pluginapi.Root{}, pluginapi.ErrInvalid
 	}
-	return normalizeRoot(m)
+	root, e := normalizeRoot(m)
+	root.Reactions = foldTones(root.Reactions)
+	return root, e
+}
+
+// Item re-reads the reactions on a reply and verifies it belongs to rootTS.
+func (s *Session) Item(ctx context.Context, channel, rootTS, ts string) (pluginapi.Root, error) {
+	if !id(channel, "channel") || !id(rootTS, "ts") || !id(ts, "ts") {
+		return pluginapi.Root{}, pluginapi.ErrInvalid
+	}
+	doc, e := s.client.Call(ctx, "reactions.get", url.Values{"channel": {channel}, "timestamp": {ts}, "full": {"true"}})
+	if e != nil {
+		var api apiError
+		if errors.As(e, &api) && api.code == "message_not_found" {
+			return pluginapi.Root{}, nil
+		}
+		return pluginapi.Root{}, e
+	}
+	m, ok := doc["message"].(map[string]any)
+	if !ok || doc["type"] != "message" || doc["channel"] != channel || m["ts"] != ts {
+		return pluginapi.Root{}, pluginapi.ErrInvalid
+	}
+	if m["thread_ts"] != rootTS {
+		return pluginapi.Root{}, nil
+	}
+	item, e := normalizeRoot(map[string]any{"ts": ts, "reactions": m["reactions"]})
+	if e != nil {
+		return pluginapi.Root{}, e
+	}
+	return pluginapi.Root{TS: ts, ThreadTS: rootTS, Reactions: foldTones(item.Reactions)}, nil
+}
+
+// threadRoot resolves the thread root of a reacted message with one bounded
+// conversations.replies read, cached per message.
+func (s *Session) threadRoot(ctx context.Context, channel, ts string) (string, error) {
+	key := channel + "/" + ts
+	if root, ok := s.roots.get(key); ok {
+		return root, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	doc, e := s.client.Call(ctx, "conversations.replies", url.Values{"channel": {channel}, "ts": {ts}, "limit": {"1"}})
+	if e != nil {
+		return "", e
+	}
+	entries, _ := doc["messages"].([]any)
+	if len(entries) == 0 {
+		return "", pluginapi.ErrInvalid
+	}
+	first, _ := entries[0].(map[string]any)
+	root := str(first["thread_ts"])
+	if root == "" {
+		root = str(first["ts"])
+	}
+	if !id(root, "ts") {
+		return "", pluginapi.ErrInvalid
+	}
+	s.roots.put(key, root)
+	return root, nil
 }
 func normalizeRoot(m map[string]any) (pluginapi.Root, error) {
 	ts := str(m["ts"])

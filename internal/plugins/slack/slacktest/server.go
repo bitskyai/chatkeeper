@@ -198,10 +198,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		doc["messages"] = []any{root}
 	case "conversations.replies":
 		doc["messages"] = []any{root, reply}
+		if r.URL.Query().Get("limit") == "1" {
+			s.mu.Lock()
+			s.counts["conversations.replies/root"]++
+			s.mu.Unlock()
+			doc["messages"] = []any{root}
+		}
 	case "reactions.get":
 		doc["type"] = "message"
 		doc["channel"] = r.URL.Query().Get("channel")
 		doc["message"] = root
+		if r.URL.Query().Get("timestamp") == reply["ts"] {
+			doc["message"] = reply
+		}
 	case "users.info":
 		uid := r.URL.Query().Get("user")
 		name := map[string]string{"UOWNER": "Fixture owner", "UAUTHOR": "Fixture author", "UMENTION": "Fixture mention"}[uid]

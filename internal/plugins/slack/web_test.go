@@ -3,6 +3,7 @@ package slack
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 type route func(*http.Request) (*http.Response, error)
@@ -73,6 +75,45 @@ func TestHTTPBoundsRedirectAndRetry(t *testing.T) {
 				t.Fatal(calls, e)
 			}
 		})
+	}
+}
+
+// TestRetryAfterCooldownAcrossPolls: a 429 Retry-After longer than the caller
+// can wait fails fast, and later polls skip the API until the cooldown ends.
+func TestRetryAfterCooldownAcrossPolls(t *testing.T) {
+	calls := 0
+	transport := &http.Client{Transport: route(func(r *http.Request) (*http.Response, error) {
+		calls++
+		res := response(429, "")
+		res.Header.Set("Retry-After", "120")
+		return res, nil
+	})}
+	token := "xoxb-synthetic-cooldown"
+	defer cooldowns.Delete(cooldownKey(token))
+	poll := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_, e := NewClient(token, transport).Call(ctx, "conversations.history", url.Values{"channel": {"CFIXTURE"}})
+		return e
+	}
+	start := time.Now()
+	if e := poll(); !errors.Is(e, errRateLimited) || calls != 1 {
+		t.Fatal(calls, e)
+	}
+	// A new client (next poll or reconnected session) honors the same cooldown.
+	if e := poll(); !errors.Is(e, errRateLimited) || calls != 1 {
+		t.Fatal("cooldown not honored across polls", calls, e)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatal("rate limit did not fail fast")
+	}
+	if left := NewClient(token, transport).cooldown(); left < 100*time.Second || left > 120*time.Second {
+		t.Fatal(left)
+	}
+	// Once the cooldown has passed, reads resume.
+	cooldowns.Store(cooldownKey(token), time.Now().Add(-time.Second))
+	if e := poll(); calls != 2 || e == nil {
+		t.Fatal(calls, e)
 	}
 }
 func TestFileRedirectValidated(t *testing.T) {
@@ -243,5 +284,22 @@ func TestSlackFileRedirectTargets(t *testing.T) {
 				t.Fatal("unsafe redirect followed", e, calls)
 			}
 		})
+	}
+}
+
+func TestFoldTones(t *testing.T) {
+	got := foldTones([]pluginapi.Reaction{
+		{Name: "+1", Users: []string{"UA"}, Count: 1},
+		{Name: "+1::skin-tone-2", Users: []string{"UB", "UA"}, Count: 2},
+		{Name: "wave::skin-tone-5", Users: []string{"UC"}, Count: 3},
+	})
+	want := map[string]int{"+1": 2, "+1::skin-tone-2": 2, "wave::skin-tone-5": 3, "wave": 3}
+	if len(got) != len(want) {
+		t.Fatal(got)
+	}
+	for _, r := range got {
+		if want[r.Name] != r.Count || r.Count < len(r.Users) {
+			t.Fatal(r, got)
+		}
 	}
 }

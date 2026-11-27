@@ -34,6 +34,10 @@ func (q *Queue) Push(e pluginapi.Event) bool {
 		if old.Kind == "reaction" && e.Kind != "reaction" {
 			return true
 		}
+		if e.ItemTS == "" && old.Kind == "reaction" {
+			// Keep the reply that a coalesced reaction event pointed at.
+			e.ItemTS = old.ItemTS
+		}
 	} else {
 		ordinary := len(q.pending)
 		if _, ok := q.pending[pluginapi.Key{}]; ok {

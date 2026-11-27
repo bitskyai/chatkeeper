@@ -117,7 +117,18 @@ type Root struct {
 	Reactions    []Reaction
 	Raw          Message
 }
-type Event struct{ Channel, RootTS, Kind string }
+
+// Event is a capture hint. ItemTS, when set and different from RootTS, names the
+// message inside the thread that a reaction event was about (a reply); the
+// runtime re-reads it through ItemReader before it may authorize an archive.
+type Event struct{ Channel, RootTS, Kind, ItemTS string }
+
+// ItemReader is an optional Session extension for realtime reply reactions: it
+// re-reads the reactions on one message of a thread and must verify that the
+// message belongs to rootTS. It returns a zero Root when the message is gone.
+type ItemReader interface {
+	Item(ctx context.Context, channel, rootTS, ts string) (Root, error)
+}
 type EventSink func(Event) bool
 
 // Blob carries inline bytes or a confined, verified local file reference.
