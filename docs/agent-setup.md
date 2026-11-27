@@ -126,5 +126,9 @@ The stdio MCP server (`chatkeeper mcp`) also offers two read-only tools:
 - `validate_setup` (`workspace`): re-runs the connection tests with the stored
   credentials and returns each check, redacted. It saves nothing.
 
+Before any workspace is configured (no config file yet), `chatkeeper mcp`
+starts in setup-only mode with just these two tools, so `setup_status` can say
+what to run next.
+
 Configuration itself is done with `chatkeeper setup`, not over MCP. HTTP MCP
 (`/mcp`) does not offer these tools.

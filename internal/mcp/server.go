@@ -10,6 +10,12 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// NewSetupOnly is the server used before any workspace is configured: it has
+// no archive tools; callers add the setup tools.
+func NewSetupOnly() *sdk.Server {
+	return sdk.NewServer(&sdk.Implementation{Name: "chatkeeper", Version: "0.3.0"}, nil)
+}
+
 func New(s *search.Service) *sdk.Server {
 	server := sdk.NewServer(&sdk.Implementation{Name: "chatkeeper", Version: "0.3.0"}, nil)
 	no := false

@@ -153,7 +153,8 @@ copyable prompt).
    **Enable Socket Mode** (`.../socket-mode`), paste and save. The step shows
    only a one-line bot token summary, not the previous checklist. **Test
    connection** opens a real Socket Mode session and checks the token belongs
-   to the same app as the bot token; revoked tokens, a missing scope, the wrong
+   to the same app as the bot token, freshly resolved from the bot token (it
+   fails closed when either app id cannot be confirmed); revoked tokens, a missing scope, the wrong
    token type, another app's token or Socket Mode switched off each show the
    exact fix and link. The manifest already enables Socket Mode and subscribes
    `reaction_added`, `reaction_removed`, `message.channels` and
@@ -214,7 +215,8 @@ env = { CHATKEEPER_HOME = "/absolute/path/app-home" }
 Tools: `search_threads`, `get_thread`, `list_workspaces`. Stdio reads local archives
 and emits JSON-RPC only on stdout. Stdio also offers read-only `setup_status`
 (credential presence only, never values) and `validate_setup` (re-runs the
-connection tests with stored credentials, redacted); see
+connection tests with stored credentials, redacted); with no config yet it
+starts with only those two tools; see
 [agent setup](docs/agent-setup.md). Use the same home
 as the running app to share its index. REST offers `GET /api/search`,
 `GET /api/threads/{workspace}/{channel}/{ts}` and `GET /api/openapi.json`.

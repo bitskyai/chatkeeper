@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -58,5 +59,35 @@ func TestSetupStatusAndValidate(t *testing.T) {
 	}
 	if _, e := ValidateWorkspace(context.Background(), cfg, store, "missing", fake.Client()); e == nil {
 		t.Fatal("unknown workspace")
+	}
+}
+
+// After the bot token is replaced by one for another app, validation must
+// compare the app-level token with the freshly resolved app, not the app id
+// saved at setup time.
+func TestValidateAfterBotTokenRotation(t *testing.T) {
+	fake := slacktest.New(t)
+	home := t.TempDir()
+	t.Setenv("SLACK_BOT_TOKEN", "")
+	t.Setenv("SLACK_APP_TOKEN", "")
+	store := &secrets.Store{Home: home}
+	cfg := filepath.Join(home, "config.yaml")
+	env := map[string]string{"B": "xoxb-synthetic-rotate", "X": "xapp-synthetic-rotate"}
+	res := RunSetup(context.Background(), SetupOptions{Platform: "slack", Workspace: "rot", Config: cfg, Home: home, Mode: "server", Values: map[string]string{"bot_token": "B", "app_token": "X", "channels": "auto"}, Getenv: func(k string) string { return env[k] }, Secrets: store, HTTP: fake.Client()})
+	if !res.OK {
+		t.Fatal(res)
+	}
+	if v, e := ValidateWorkspace(context.Background(), cfg, store, "rot", fake.Client()); e != nil || !v.OK {
+		t.Fatal("matching tokens must validate", v, e)
+	}
+	// The stored bot token now belongs to app ANEW; the app-level token is
+	// still AFIXTURE's and the saved settings still say AFIXTURE.
+	fake.Overrides["bots.info"] = func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"bot":{"id":"BFIXTURE","app_id":"ANEW"}}`))
+	}
+	v, e := ValidateWorkspace(context.Background(), cfg, store, "rot", fake.Client())
+	b, _ := json.Marshal(v)
+	if e != nil || v.OK || !strings.Contains(string(b), "different Slack app (AFIXTURE) than your bot token (ANEW)") {
+		t.Fatal("mismatched credentials approved after rotation", string(b), e)
 	}
 }

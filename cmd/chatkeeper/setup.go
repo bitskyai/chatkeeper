@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bitskyai/chatkeeper/internal/config"
 	"github.com/bitskyai/chatkeeper/internal/secrets"
 	"github.com/bitskyai/chatkeeper/internal/web"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
@@ -140,8 +141,13 @@ func setupCommand(home string, args []string, out io.Writer) error {
 		return errors.New("setup: --mode must be desktop or server")
 	}
 	o.Secrets = &secrets.Store{Home: home, Desktop: o.Mode == "desktop"}
+	// Same hardening as the web wizard: MkdirAll keeps the mode of an
+	// existing directory, so restrict it explicitly.
 	if e := os.MkdirAll(home, 0o700); e != nil {
 		return errors.New("setup: cannot create application home")
+	}
+	if e := config.PrivatePath(home); e != nil {
+		return errors.New("setup: cannot restrict application home to the current user")
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

@@ -18,6 +18,7 @@ import (
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -135,6 +136,22 @@ func execute(args []string, out io.Writer) error {
 		return runWeb(home, *name, *mode, address, *hosts, *noBrowser, *dev, out)
 	}
 	if command == "mcp" {
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		store := &secrets.Store{Home: home, Desktop: web.ConfiguredMode(*mode, "127.0.0.1") == "desktop"}
+		setupTools := archiveMCP.SetupTools{
+			Status: func(context.Context) (any, error) { return web.SetupStatus(*name, store) },
+			Validate: func(ctx context.Context, workspace string) (any, error) {
+				return web.ValidateWorkspace(ctx, *name, store, workspace, setupHTTP)
+			},
+		}
+		// Before setup there is nothing to search: serve only the setup tools
+		// so an agent can still ask setup_status what to do next.
+		if _, e := os.Stat(*name); errors.Is(e, fs.ErrNotExist) {
+			server := archiveMCP.NewSetupOnly()
+			archiveMCP.AddSetup(server, setupTools)
+			return server.Run(ctx, &sdk.StdioTransport{})
+		}
 		cfg, e := config.Load(*name, false)
 		if e != nil {
 			return e
@@ -149,19 +166,11 @@ func execute(args []string, out io.Writer) error {
 			}
 			sources[entry.Workspace.ID] = source
 		}
-		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer cancel()
 		if e := service.Configure(ctx, sources); e != nil {
 			return e
 		}
 		server := archiveMCP.New(service)
-		store := &secrets.Store{Home: home, Desktop: web.ConfiguredMode(*mode, "127.0.0.1") == "desktop"}
-		archiveMCP.AddSetup(server, archiveMCP.SetupTools{
-			Status: func(context.Context) (any, error) { return web.SetupStatus(*name, store) },
-			Validate: func(ctx context.Context, workspace string) (any, error) {
-				return web.ValidateWorkspace(ctx, *name, store, workspace, setupHTTP)
-			},
-		})
+		archiveMCP.AddSetup(server, setupTools)
 		return server.Run(ctx, &sdk.StdioTransport{})
 	}
 

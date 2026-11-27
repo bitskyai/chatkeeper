@@ -242,15 +242,13 @@ func botApp(ctx context.Context, env pluginapi.Env) (teamID, appID string) {
 	return teamID, appID
 }
 
-// expectedApp prefers the ids saved by the bot token step or the workspace
-// settings, else asks Slack.
+// expectedApp picks the ids for settings links: the live bot token lookup
+// first, else the ids saved by the bot token step or the workspace settings.
 func expectedApp(ctx context.Context, st pluginapi.SetupState, env pluginapi.Env) (teamID, appID string) {
-	_ = json.Unmarshal(st["team_id"], &teamID)
-	_ = json.Unmarshal(st["app_id"], &appID)
-	if id(teamID, "team") && appPattern.MatchString(appID) {
-		return teamID, appID
-	}
-	t, a := botApp(ctx, env)
+	teamID, appID = botApp(ctx, env)
+	var t, a string
+	_ = json.Unmarshal(st["team_id"], &t)
+	_ = json.Unmarshal(st["app_id"], &a)
 	if !id(teamID, "team") {
 		teamID = t
 	}
@@ -282,23 +280,48 @@ func validateApp(ctx context.Context, st pluginapi.SetupState, _ json.RawMessage
 	if !validToken(token, "xapp-") {
 		return pluginapi.StepResult{FieldErrors: map[string]string{"app_token": "Paste the App-Level Token starting with xapp-, without spaces"}}, nil
 	}
-	team, want := expectedApp(ctx, st, env)
+	team, want, why := verifiedApp(ctx, st, env)
 	links := AppLinks(team, want)
 	check, got, ok := socketHandshake(ctx, NewClient("", env.HTTP), token)
 	if !ok {
 		return pluginapi.StepResult{Checks: []pluginapi.Check{check}, Links: links, Messages: []string{"Socket Mode test failed: " + check.Detail}}, nil
 	}
 	checks := []pluginapi.Check{{Label: "App-level token", Detail: "accepted (" + AppTokenScope + ")", OK: true}, check}
+	// Fail closed: instant capture is only claimed once both sides of the
+	// comparison are known, so an unrelated app's token can never pass.
 	switch {
-	case want != "" && got != "" && got != want:
+	case want == "":
+		checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: "bot token's app unknown: " + why})
+		return pluginapi.StepResult{Checks: checks, Links: links, Messages: []string{"ChatKeeper could not confirm which Slack app the bot token belongs to (" + why + "), so it cannot check that this app-level token is for the same app. Test the bot token again (it needs users:read for bots.info), check your network, then test this token again."}}, nil
+	case got == "":
+		checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: "Slack's hello did not name the app"})
+		return pluginapi.StepResult{Checks: checks, Links: links, Messages: []string{"Socket Mode connected, but Slack did not say which app the token belongs to, so ChatKeeper cannot confirm it matches your bot token (" + want + "). Test again; if it persists, generate a new token under Basic Information > App-Level Tokens for " + want + "."}}, nil
+	case got != want:
 		checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: "token is for " + got + ", bot token is for " + want})
 		return pluginapi.StepResult{Checks: checks, Links: links, Messages: []string{"This app-level token belongs to a different Slack app (" + got + ") than your bot token (" + want + "). Click Open Basic Information to generate one for " + want + ", then paste it here."}}, nil
-	case want != "" && got == want:
-		checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: got, OK: true})
-	default:
-		checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: "could not compare app ids", OK: true, Optional: true})
 	}
+	checks = append(checks, pluginapi.Check{Label: "Same Slack app", Detail: got, OK: true})
 	return pluginapi.StepResult{OK: true, Checks: checks, Messages: []string{"Socket Mode connected. Reactions will be archived instantly."}}, nil
+}
+
+// verifiedApp resolves the app the current bot token belongs to. A live
+// lookup always wins over saved ids, which go stale when the bot token is
+// rotated; saved ids are used only when no bot token is available. why
+// explains an empty appID.
+func verifiedApp(ctx context.Context, st pluginapi.SetupState, env pluginapi.Env) (teamID, appID, why string) {
+	if validToken(env.Credentials["bot_token"], "xoxb-") {
+		teamID, appID = botApp(ctx, env)
+		if appID == "" {
+			return teamID, "", "the auth.test/bots.info lookup failed"
+		}
+		return teamID, appID, ""
+	}
+	_ = json.Unmarshal(st["team_id"], &teamID)
+	_ = json.Unmarshal(st["app_id"], &appID)
+	if !appPattern.MatchString(appID) {
+		return teamID, "", "no bot token or saved app id"
+	}
+	return teamID, appID, ""
 }
 
 // SocketCheck performs one complete Socket Mode handshake.

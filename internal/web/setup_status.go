@@ -138,6 +138,15 @@ func ValidateWorkspace(ctx context.Context, configPath string, store *secrets.St
 			r := SetupStepResult{ID: step.ID, Title: step.Title}
 			if e == nil {
 				r = redactStep(step, out, creds)
+				// Later steps compare against the identities this step just
+				// resolved, not the saved ones, which go stale on rotation.
+				if out.OK {
+					z := wizard{Data: state, Credentials: creds}
+					if z.merge(out.Data) != nil {
+						r.OK = false
+						r.Messages = append(r.Messages, "invalid setup result")
+					}
+				}
 			} else {
 				r.Messages = []string{"the check could not complete; retry"}
 			}

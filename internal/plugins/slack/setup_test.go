@@ -156,10 +156,27 @@ func TestAppTokenSameAppAndFixes(t *testing.T) {
 	if len(prep.Links) != 1 || prep.Links[0].URL != "https://api.slack.com/apps" || len(prep.Messages) == 0 {
 		t.Fatal("unresolved app must fall back to the app list", prep)
 	}
-	if res, _ := app.Test(context.Background(), nil, nil, env); !res.OK {
-		t.Fatal("an unresolvable app id must not block a working token", res)
+	// Fail closed: without the bot token's app id a working token from an
+	// unrelated app must not pass, even with stale saved ids.
+	for _, st := range []pluginapi.SetupState{nil, {"team_id": json.RawMessage(`"TFIXTURE"`), "app_id": json.RawMessage(`"AFIXTURE"`)}} {
+		res, _ := app.Test(context.Background(), st, nil, env)
+		if res.OK || !strings.Contains(strings.Join(res.Messages, " "), "could not confirm which Slack app") {
+			t.Fatal("unresolved bot app must fail closed", res)
+		}
 	}
 	delete(f.Overrides, "bots.info")
+	// A hello without an app id cannot be compared either.
+	f.Overrides["apps.connections.open"] = func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"url":"wss://socket.slack.com/socket?app=none"}`))
+	}
+	if res, _ := app.Test(context.Background(), nil, nil, env); res.OK || !strings.Contains(strings.Join(res.Messages, " "), "did not say which app") {
+		t.Fatal("hello without app id must fail closed", res)
+	}
+	delete(f.Overrides, "apps.connections.open")
+	// The live lookup beats stale saved ids (bot token rotated to another app).
+	if res, _ := app.Test(context.Background(), pluginapi.SetupState{"app_id": json.RawMessage(`"AOLD"`)}, nil, env); !res.OK {
+		t.Fatal("fresh bot identity must win over saved app id", res)
+	}
 	open := func(body string) {
 		f.Overrides["apps.connections.open"] = func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(body)) }
 	}

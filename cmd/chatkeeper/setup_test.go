@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bitskyai/chatkeeper/internal/config"
 	"github.com/bitskyai/chatkeeper/internal/plugins/slack/slacktest"
 )
 
@@ -31,6 +32,10 @@ func TestSetupCommandEndToEnd(t *testing.T) {
 	setupHTTP = fake.Client()
 	defer func() { setupHTTP = before }()
 	home := t.TempDir()
+	// A pre-existing, permissive home must be restricted like the wizard does.
+	if e := os.Chmod(home, 0o755); e != nil {
+		t.Fatal(e)
+	}
 	t.Setenv("CHATKEEPER_HOME", home)
 	t.Setenv("CHATKEEPER_MODE", "server")
 	const bot, app = "xoxb-synthetic-agent-secret", "xapp-synthetic-agent-secret"
@@ -48,6 +53,9 @@ func TestSetupCommandEndToEnd(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, "config.yaml")); err == nil {
 		t.Fatal("dry run wrote config")
+	}
+	if !config.IsPrivate(home) {
+		t.Fatal("setup left the application home readable by others")
 	}
 	settings := res["settings"].(map[string]any)
 	if ch := settings["channels"].([]any); len(ch) != 1 || ch[0] != "CFIXTURE" {
