@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/bitskyai/chatkeeper/internal/config"
 	"github.com/bitskyai/chatkeeper/pkg/pluginapi"
@@ -22,10 +23,7 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request, csrf string, set
 	pg := page{Title: title, Kind: kind, CSRF: csrf, Error: a.Manager.Failure(), Managed: !config.Writable(a.opts.Config), Rows: a.archiveRows(""), ConfigPath: a.opts.Config}
 	for _, running := range a.Manager.List() {
 		health := running.Runtime.Health()
-		transport := "polling"
-		if health.Realtime {
-			transport = "realtime + polling"
-		}
+		transport := transportLabel(running)
 		state := health.State
 		if running.Paused {
 			state = "paused"
@@ -34,7 +32,13 @@ func (a *App) dashboard(w http.ResponseWriter, r *http.Request, csrf string, set
 		if !health.LastCapture.IsZero() {
 			last = health.LastCapture.UTC().Format(time.RFC3339)
 		}
-		wr := workspaceRow{ID: running.Entry.Workspace.ID, State: state, Error: health.ErrorClass, Transport: transport, LastCapture: last, Paused: running.Paused}
+		wr := workspaceRow{ID: running.Entry.Workspace.ID, State: state, Error: health.ErrorClass, Transport: transport, LastCapture: last, Paused: running.Paused, Activity: running.Runtime.Activity()}
+		if len(wr.Activity) > 10 {
+			wr.Activity = wr.Activity[:10]
+		}
+		a.reportMu.Lock()
+		wr.Report = a.reports[wr.ID]
+		a.reportMu.Unlock()
 		wr.Fields = schemaFields(running.Entry.Plugin.CredentialSchema())
 		var raw map[string]any
 		_ = json.Unmarshal(running.Entry.Workspace.Settings, &raw)
@@ -82,6 +86,22 @@ func (a *App) settings(w http.ResponseWriter, r *http.Request, csrf string) {
 		a.wizards = map[string]*wizard{}
 		a.mu.Unlock()
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	case "/settings/check":
+		id := r.FormValue("workspace")
+		for _, running := range a.Manager.List() {
+			if running.Entry.Workspace.ID == id {
+				ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+				report := running.Runtime.CheckNow(ctx)
+				cancel()
+				a.reportMu.Lock()
+				a.reports[id] = &report
+				a.reportMu.Unlock()
+				http.Redirect(w, r, "/#workspace-"+id, http.StatusSeeOther)
+				return
+			}
+		}
+		http.NotFound(w, r)
 		return
 	case "/settings/remove", "/settings/pause", "/settings/credentials":
 		id := r.FormValue("workspace")

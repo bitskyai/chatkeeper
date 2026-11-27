@@ -17,7 +17,7 @@ func (Plugin) Manifest() pluginapi.Manifest {
 	return pluginapi.Manifest{ID: "slack", Name: "Slack", Version: "0.1.0", APIVersion: 1, Capabilities: pluginapi.Capabilities{ReadHistory: true, Realtime: true, Delete: true}, ClaimsLegacy: true, DefaultReactions: []string{"white_check_mark"}}
 }
 func (Plugin) ConfigSchema() json.RawMessage {
-	return json.RawMessage(`{"type":"object","properties":{"team_id":{"type":"string","pattern":"^T[A-Z0-9]+$"}},"required":["team_id"]}`)
+	return json.RawMessage(`{"type":"object","properties":{"team_id":{"type":"string","pattern":"^T[A-Z0-9]+$"},"app_id":{"type":"string","pattern":"^A[A-Z0-9]+$"}},"required":["team_id"]}`)
 }
 func (Plugin) CredentialSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"bot_token":{"type":"string","x-secret":true,"x-env-default":"SLACK_BOT_TOKEN"},"app_token":{"type":"string","x-secret":true,"x-env-default":"SLACK_APP_TOKEN"}},"required":["bot_token"]}`)
@@ -29,6 +29,9 @@ func validToken(s, prefix string) bool {
 func (Plugin) ParseWorkspace(_ context.Context, raw json.RawMessage, creds pluginapi.Credentials) (pluginapi.Settings, error) {
 	var m map[string]any
 	if json.Unmarshal(raw, &m) != nil || !id(m["team_id"], "team") {
+		return nil, pluginapi.ErrInvalid
+	}
+	if v, has := m["app_id"]; has && !appPattern.MatchString(str(v)) {
 		return nil, pluginapi.ErrInvalid
 	}
 	if len(creds) > 0 && (!validToken(creds["bot_token"], "xoxb-") || creds["app_token"] != "" && !validToken(creds["app_token"], "xapp-")) {
@@ -60,6 +63,9 @@ func (Plugin) ParseWorkspace(_ context.Context, raw json.RawMessage, creds plugi
 					return nil, pluginapi.ErrInvalid
 				}
 			}
+		}
+		if raw, has := t["match"]; has && raw != "any" && raw != "all" {
+			return nil, pluginapi.ErrInvalid
 		}
 		if raw, has := t["owners"]; has {
 			a, ok := raw.([]any)

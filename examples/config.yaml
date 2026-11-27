@@ -11,7 +11,8 @@ workspaces:
     channels: [CFIXTURE]
     poll_interval: 120
     trigger:
-      reactions: [white_check_mark]
+      reactions: [white_check_mark, bookmark]
+      match: any # any listed reaction archives; omit or use "all" to require every one
       who: owner
       owners: [UOWNER]
     storage:

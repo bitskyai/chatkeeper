@@ -41,7 +41,7 @@ func TestBrowserWizard(t *testing.T) {
 					scopes = "channels:read"
 				}
 				w.Header().Set("X-OAuth-Scopes", scopes)
-				fmt.Fprint(w, `{"ok":true,"team_id":"TFIXTURE","user_id":"UBOT"}`)
+				fmt.Fprint(w, `{"ok":true,"team":"Fixture","team_id":"TFIXTURE","user":"fixturebot","user_id":"UBOT","bot_id":"BFIXTURE"}`)
 			}
 			fake.Overrides["conversations.list"] = func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Query().Get("cursor") == "synthetic-next" {
@@ -64,7 +64,7 @@ func TestBrowserWizard(t *testing.T) {
 			defer cancel()
 			ctx, cancel := chromedp.NewContext(alloc)
 			defer cancel()
-			ctx, cancel = context.WithTimeout(ctx, 75*time.Second)
+			ctx, cancel = context.WithTimeout(ctx, 150*time.Second)
 			defer cancel()
 			run := func(actions ...chromedp.Action) {
 				t.Helper()
@@ -81,7 +81,12 @@ func TestBrowserWizard(t *testing.T) {
 					t.Fatal(e)
 				}
 			}
-			next := func(want string) { click("main button[type=submit]"); run(title(want)) }
+			// Continue is always the last action; Back and Test connection come first.
+			next := func(want string) { click("main .actions button[type=submit]:last-of-type"); run(title(want)) }
+			back := func(want string) { click(`main button[formaction="/setup/back"]`); run(title(want)) }
+			has := func(text string) chromedp.Action {
+				return chromedp.Poll(fmt.Sprintf("document.body.innerText.includes(%q)", text), nil)
+			}
 			capture := func(name string) {
 				t.Helper()
 				if os.Getenv("CHATKEEPER_SCREENSHOTS") == "" {
@@ -101,50 +106,76 @@ func TestBrowserWizard(t *testing.T) {
 				run(chromedp.Navigate(server.URL+"/bootstrap"), title("Welcome to ChatKeeper"))
 				capture("bootstrap")
 				run(chromedp.SendKeys("input[name=code]", "synthetic-setup-code"), chromedp.SendKeys("input[name=password]", "synthetic-password"))
-				next("What would you like to connect?")
+				click("main button[type=submit]")
+				run(title("What would you like to connect?"))
 			} else {
 				run(chromedp.Navigate(a.LaunchURL(server.URL)), title("What would you like to connect?"))
 			}
 			capture("platforms")
 			click("form:has(input[value=slack]) button")
-			run(title("Create your Slack app"))
+			run(title("Create your Slack app"), has("only shows the bot token"))
 			capture("create-app")
-			next("Paste your tokens")
+			next("Paste your bot token")
 			capture("tokens")
+			// Item 3: Test connection reports itemized results without advancing.
 			run(chromedp.SendKeys("input[name=bot_token]", "xoxb-invalid"))
-			next("Check your connection")
-			next("Check your connection")
-			run(chromedp.Poll("document.body.innerText.includes('Bot token is invalid')", nil))
+			click(`button[value=test]`)
+			run(title("Paste your bot token"), has("Bot token is invalid"))
 			capture("bad-token")
-			// Restart is explicit; validation failures never advance the wizard.
-			run(chromedp.Navigate(server.URL + "/setup/"))
-			click("form:has(input[value=slack]) button")
-			run(title("Create your Slack app"))
-			next("Paste your tokens")
 			run(chromedp.SendKeys("input[name=bot_token]", "xoxb-synthetic"))
-			next("Check your connection")
 			authMode.Store(1)
-			next("Check your connection")
-			run(chromedp.Poll("document.body.innerText.includes('files:read')", nil))
+			click(`button[value=test]`)
+			run(has("Missing scopes"), has("files:read"))
 			capture("missing-scopes")
 			authMode.Store(0)
-			next("Choose channels")
-			run(chromedp.Poll("document.body.innerText.includes('polling-only')", nil))
+			click(`button[value=test]`)
+			run(has("@fixturebot (UBOT)"), has("Fixture (TFIXTURE)"), has("Saved · leave blank"))
+			capture("test-connection")
+			next("Add the app-level token")
+			// Item 1: the app-level token guidance deep-links the app's settings.
+			run(chromedp.Poll(`document.querySelector('a[href="https://api.slack.com/apps/AFIXTURE/general"]') !== null`, nil), has("App-Level Tokens"), has("connections:write"))
+			capture("app-token")
+			// Item 2: Back keeps the bot token server-side.
+			back("Paste your bot token")
+			run(has("Saved · leave blank"))
+			next("Add the app-level token")
+			if mode == "desktop" {
+				click(`button[value=skip]`)
+				run(title("Choose channels"), has("Polling only"))
+			} else {
+				run(chromedp.SendKeys("input[name=app_token]", "xapp-synthetic"))
+				click(`button[value=test]`)
+				run(has("connected (hello received)"))
+				capture("socket-test")
+				next("Choose channels")
+			}
 			capture("channels")
-			// Prove the optional-token notice, then connect Socket Mode for the live reaction.
-			run(chromedp.Navigate(server.URL + "/setup/"))
-			click("form:has(input[value=slack]) button")
-			run(title("Create your Slack app"))
-			next("Paste your tokens")
-			run(chromedp.SendKeys("input[name=bot_token]", "xoxb-synthetic"), chromedp.SendKeys("input[name=app_token]", "xapp-synthetic"))
-			next("Check your connection")
-			next("Choose channels")
 			run(chromedp.SetAttributeValue("input[name=channels][value=COTHER]", "checked", "checked"))
 			next("Choose channels")
-			run(chromedp.Poll("document.body.innerText.includes('Invite the bot')", nil))
-			run(chromedp.SetAttributeValue("input[name=channels][value=CFIXTURE]", "checked", "checked"))
-			next("Choose a reaction")
+			run(has("Invite the bot"))
+			run(chromedp.Evaluate(`document.querySelector("input[name=channels][value=COTHER]").checked = false; document.querySelector("input[name=channels][value=CFIXTURE]").checked = true`, nil))
+			next("Choose reactions")
+			// Item 4: searchable glyph grid with categories and custom emoji.
+			run(chromedp.Poll(`document.querySelectorAll("label.emoji").length > 1800 && document.querySelector('[data-group-section="Custom"] img') !== null`, nil))
+			run(chromedp.SendKeys("input[data-picker-search]", "wastebasket"))
+			run(chromedp.Poll(`document.querySelector('label.emoji:has(input[value="wastebasket"])').offsetParent !== null && document.querySelector('label.emoji:has(input[value="grinning"])').offsetParent === null`, nil))
+			// Element clicks, not coordinates: filtering reflows the grid.
+			tap := func(selector string) {
+				run(chromedp.Evaluate(fmt.Sprintf("document.querySelector(%q).click()", selector), nil))
+			}
+			tap(`label.emoji:has(input[value="wastebasket"])`)
+			run(chromedp.Evaluate(`document.querySelector("input[data-picker-search]").value = ""`, nil), chromedp.SendKeys("input[data-picker-search]", "parrot"))
+			tap(`label.emoji:has(input[value="fixture_parrot"])`)
+			run(chromedp.Poll(`document.querySelector("[data-picker-selected]").innerText.includes(":wastebasket:") && document.querySelector("[data-picker-selected]").innerText.includes(":fixture_parrot:")`, nil))
+			// Starting from the default, remove white_check_mark so only the two picks remain.
+			run(chromedp.Evaluate(`document.querySelector('input[name=reactions][value="white_check_mark"]').checked = false`, nil))
 			capture("reaction")
+			next("Connection ready")
+			back("Choose reactions")
+			run(chromedp.Poll(`document.querySelector('input[value="wastebasket"]').checked && document.querySelector('input[value="fixture_parrot"]').checked`, nil))
+			back("Choose channels")
+			run(chromedp.Poll(`document.querySelector('input[name=channels][value=CFIXTURE]').checked`, nil))
+			next("Choose reactions")
 			next("Connection ready")
 			next("Where should we save your threads?")
 			storage := filepath.Join(home, "data", "fixture")
@@ -152,7 +183,7 @@ func TestBrowserWizard(t *testing.T) {
 			capture("storage")
 			if mode == "server" {
 				next("Where should we save your threads?")
-				run(chromedp.Poll("document.body.innerText.includes('inside the server data root')", nil))
+				run(has("inside the server data root"))
 				if _, err := os.Stat(filepath.Join(home, "secrets.env")); !os.IsNotExist(err) {
 					t.Fatal("invalid storage submission saved credentials")
 				}
@@ -160,28 +191,40 @@ func TestBrowserWizard(t *testing.T) {
 			run(chromedp.SetValue("input[name=storage]", storage))
 			next("Try your first archive")
 			capture("live-test")
-			fake.Mark(true)
-			deadline := time.Now().Add(5 * time.Second)
-			for (!fake.Connected() || fake.Calls("conversations.history") == 0) && time.Now().Before(deadline) {
-				time.Sleep(10 * time.Millisecond)
+			fake.SetReaction("fixture_parrot")
+			if mode == "desktop" {
+				// Items 5 and 6: polling-only Check now explains, then archives.
+				fake.MarkReply(true)
+				click("#check-now")
+				run(has("on a reply (101.000001)"), has("bot is a member"), has("Live events are off (polling only)"))
+				capture("check-now-log")
+				fake.MarkReply(false)
+				fake.Mark(true)
+				click("#check-now")
+			} else {
+				fake.Mark(true)
+				deadline := time.Now().Add(5 * time.Second)
+				for (!fake.Connected() || fake.Calls("conversations.history") == 0) && time.Now().Before(deadline) {
+					time.Sleep(10 * time.Millisecond)
+				}
+				if !fake.Connected() {
+					t.Fatal("Socket Mode did not connect")
+				}
+				fake.Emit("TFIXTURE", map[string]any{"type": "reaction_added", "item": map[string]any{"type": "message", "channel": "CFIXTURE", "ts": "100.000001"}})
 			}
-			if !fake.Connected() {
-				t.Fatal("Socket Mode did not connect")
-			}
-			fake.Emit("TFIXTURE", map[string]any{"type": "reaction_added", "item": map[string]any{"type": "message", "channel": "CFIXTURE", "ts": "100.000001"}})
-
 			run(chromedp.Poll("document.querySelector('.archive-list a') !== null", nil, chromedp.WithPollingInterval(250*time.Millisecond)))
 			capture("done")
 			click(".archive-list a")
-			run(chromedp.Poll("document.body.innerText.includes('Synthetic reply')", nil))
+			run(has("Synthetic reply"), has(":fixture_parrot: 1 ★"))
 			capture("viewer")
 			run(chromedp.SetValue(`form[action="/search"] input[name="q"]`, "Synthetic", chromedp.ByQuery))
 			click(`form[action="/search"] button`)
 			run(chromedp.Poll("document.querySelector('h1')?.textContent === 'Search archives' && document.body.innerText.includes('CFIXTURE')", nil))
 			capture("search")
 			click("article h2 a")
-			run(chromedp.Poll("document.body.innerText.includes('Synthetic reply')", nil))
-			run(chromedp.Navigate(server.URL+"/"), title("Your threads, kept safe"))
+			run(has("Synthetic reply"))
+			run(chromedp.Navigate(server.URL+"/"), title("Your threads, kept safe"), has("Recent capture events"), has("Archived thread CFIXTURE / 100.000001"))
+			capture("dashboard")
 			run(chromedp.SetValue(`form[action="/search"] input[name="q"]`, "Synthetic", chromedp.ByQuery))
 			click(`form[action="/search"] button`)
 			run(chromedp.Poll("document.querySelector('article h2 a') !== null", nil))

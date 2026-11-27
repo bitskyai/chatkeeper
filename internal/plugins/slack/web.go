@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -28,7 +29,7 @@ type apiError struct{ code string }
 
 func (e apiError) Error() string { return "API read failed: " + e.code }
 
-var readMethods = map[string]bool{"auth.test": true, "conversations.history": true, "conversations.replies": true, "reactions.get": true, "users.info": true, "users.list": true, "chat.getPermalink": true, "users.conversations": true, "conversations.list": true}
+var readMethods = map[string]bool{"auth.test": true, "conversations.history": true, "conversations.replies": true, "reactions.get": true, "users.info": true, "users.list": true, "chat.getPermalink": true, "users.conversations": true, "conversations.list": true, "conversations.info": true, "emoji.list": true, "bots.info": true}
 
 type Client struct {
 	token string
@@ -161,6 +162,97 @@ func (c *Client) Download(ctx context.Context, rawURL string) ([]byte, error) {
 type Session struct {
 	client         *Client
 	team, appToken string
+	live           liveState
+}
+
+// liveState is the Socket Mode connection status shown by diagnostics.
+type liveState struct {
+	mu        sync.Mutex
+	connected bool
+	detail    string
+}
+
+func (l *liveState) set(connected bool, detail string) {
+	l.mu.Lock()
+	l.connected, l.detail = connected, detail
+	l.mu.Unlock()
+}
+func (s *Session) RealtimeStatus() (bool, string) {
+	if s.appToken == "" {
+		return false, "No app-level token is configured."
+	}
+	s.live.mu.Lock()
+	defer s.live.mu.Unlock()
+	if !s.live.connected && s.live.detail == "" {
+		return false, "Socket Mode is connecting."
+	}
+	return s.live.connected, s.live.detail
+}
+
+// InspectChannels reports names and bot membership for diagnostics.
+func (s *Session) InspectChannels(ctx context.Context, ids []string) ([]pluginapi.ChannelStatus, error) {
+	out := []pluginapi.ChannelStatus{}
+	for _, cid := range ids {
+		if !id(cid, "channel") {
+			continue
+		}
+		st := pluginapi.ChannelStatus{ID: cid}
+		doc, e := s.client.Call(ctx, "conversations.info", url.Values{"channel": {cid}})
+		var api apiError
+		switch {
+		case errors.As(e, &api) && api.code == "channel_not_found":
+			st.Problem = "channel not found or private without the bot: invite @ChatKeeper with /invite @ChatKeeper"
+		case e != nil:
+			st.Problem = "could not read channel details: " + e.Error()
+		default:
+			ch, _ := doc["channel"].(map[string]any)
+			st.Name = str(ch["name"])
+			st.Member = ch["is_member"] == true
+			if ch["is_archived"] == true {
+				st.Problem = "channel is archived"
+			}
+		}
+		out = append(out, st)
+		if len(out) >= 200 {
+			break
+		}
+	}
+	return out, nil
+}
+
+// ReplyReactions lists trigger reactions placed on replies rather than roots.
+func (s *Session) ReplyReactions(ctx context.Context, roots []pluginapi.RootRef, names []string) ([]pluginapi.ReplyReaction, error) {
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
+	out := []pluginapi.ReplyReaction{}
+	for _, root := range roots {
+		if !id(root.Channel, "channel") || !id(root.RootTS, "ts") {
+			continue
+		}
+		doc, e := s.client.Call(ctx, "conversations.replies", url.Values{"channel": {root.Channel}, "ts": {root.RootTS}, "limit": {"200"}})
+		if e != nil {
+			return out, nil
+		}
+		entries, _ := doc["messages"].([]any)
+		for _, raw := range entries {
+			m, ok := raw.(map[string]any)
+			if !ok || str(m["ts"]) == root.RootTS {
+				continue
+			}
+			reply, e := normalizeRoot(map[string]any{"ts": "0.0", "reactions": m["reactions"]})
+			if e != nil {
+				continue
+			}
+			for _, r := range reply.Reactions {
+				if want[r.Name] {
+					out = append(out, pluginapi.ReplyReaction{Channel: root.Channel, RootTS: root.RootTS, TS: str(m["ts"]), Name: r.Name})
+				}
+			}
+		}
+	}
+	return out, nil
 }
 
 func (s *Session) Capabilities() pluginapi.Capabilities {
@@ -318,7 +410,8 @@ func (s *Session) History(ctx context.Context, channel, oldest string) ([]plugin
 		if e != nil {
 			return nil, e
 		}
-		out = append(out, pluginapi.RootRef{Channel: channel, RootTS: ts, Reactions: root.Reactions})
+		replies, _ := integer(m["reply_count"])
+		out = append(out, pluginapi.RootRef{Channel: channel, RootTS: ts, Reactions: root.Reactions, Replies: int(replies)})
 	}
 	return out, nil
 }

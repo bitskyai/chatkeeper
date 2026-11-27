@@ -29,7 +29,9 @@ var pages = template.Must(template.ParseFS(templates, "templates/*.html"))
 type Source struct {
 	Store   storage.Store
 	Content pluginapi.ContentHooks
-	path    string
+	// Triggers names the workspace's archive reactions so the viewer can mark them.
+	Triggers []string
+	path     string
 }
 type Viewer struct {
 	sources  map[string]Source
@@ -48,7 +50,15 @@ func New(sources map[string]Source, token string) *Viewer {
 }
 
 type row struct{ URL, Label string }
-type message struct{ TS, Author, Text, SourceDeletedAt string }
+type message struct {
+	TS, Author, Text, SourceDeletedAt string
+	Reactions                         []reactionView
+}
+type reactionView struct {
+	Name, Glyph string
+	Count       int
+	Trigger     bool
+}
 type threadPage struct {
 	Title, Back, Permalink, CleanupStatus string
 	Messages                              []message
@@ -182,7 +192,20 @@ func (v *Viewer) serveHTTP(w http.ResponseWriter, r *http.Request, sources map[s
 		}
 		ts, _ := m["ts"].(string)
 		deletedAt, _ := m["source_deleted_at"].(string)
-		page.Messages = append(page.Messages, message{TS: ts, Author: author, Text: text, SourceDeletedAt: deletedAt})
+		msg := message{TS: ts, Author: author, Text: text, SourceDeletedAt: deletedAt}
+		if renderer, ok := source.Content.(pluginapi.ReactionRenderer); ok {
+			views, e := core.Call(ctx, 10*time.Second, func(c context.Context) ([]pluginapi.ReactionView, error) { return renderer.Reactions(c, m) })
+			if e == nil {
+				for _, rv := range views {
+					trigger := false
+					for _, name := range source.Triggers {
+						trigger = trigger || name == rv.Name
+					}
+					msg.Reactions = append(msg.Reactions, reactionView{Name: rv.Name, Glyph: rv.Glyph, Count: rv.Count, Trigger: trigger})
+				}
+			}
+		}
+		page.Messages = append(page.Messages, msg)
 		if page.Title == "" {
 			page.Title = text
 		}

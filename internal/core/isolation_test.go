@@ -246,7 +246,9 @@ func TestBackfillRepairsAndIncremental(t *testing.T) {
 	if n, e := r.Backfill(context.Background(), s); e != nil || n != 0 {
 		t.Fatal(n, e)
 	}
-	if s.oldest.Load() != "1799999700.000000" {
+	// Incremental polls rescan the recent window, not just posts since the last
+	// poll: a reaction may be added to an older root at any time.
+	if s.oldest.Load() != "1799913660.000000" {
 		t.Fatal(s.oldest.Load())
 	}
 	s.failHistory.Store(true)

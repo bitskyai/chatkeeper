@@ -37,10 +37,14 @@ type Manifest struct {
 	DefaultReactions []string
 }
 type Settings json.RawMessage
+
+// Trigger selects roots to archive. Match "all" (the default, kept for legacy
+// configurations) requires every listed reaction; "any" requires at least one.
 type Trigger struct {
 	Reactions []string `json:"reactions" yaml:"reactions"`
 	Who       string   `json:"who" yaml:"who"`
 	Owners    []string `json:"owners" yaml:"owners"`
+	Match     string   `json:"match,omitempty" yaml:"match,omitempty"`
 }
 type CleanupPolicy struct {
 	Enabled     bool
@@ -67,10 +71,40 @@ type Env struct {
 }
 type Identity struct{ TeamID, UserID string }
 type Channel struct{ ID, Name string }
+
+// ChannelStatus reports whether the connected account can read a channel.
+type ChannelStatus struct {
+	ID, Name string
+	Member   bool
+	Problem  string
+}
+
+// ChannelInspector is an optional Session extension used by diagnostics.
+type ChannelInspector interface {
+	InspectChannels(context.Context, []string) ([]ChannelStatus, error)
+}
+
+// RealtimeReporter is an optional Session extension describing the live
+// event connection. Detail is a short user-facing explanation.
+type RealtimeReporter interface {
+	RealtimeStatus() (connected bool, detail string)
+}
+
+// ReplyReaction is a reaction on a non-root message, reported by diagnostics only.
+type ReplyReaction struct {
+	Channel, RootTS, TS, Name string
+}
+
+// ReplyInspector is an optional Session extension: it lists reactions placed
+// on replies of the given roots so diagnostics can explain why they never match.
+type ReplyInspector interface {
+	ReplyReactions(context.Context, []RootRef, []string) ([]ReplyReaction, error)
+}
 type Key struct{ Channel, RootTS string }
 type RootRef struct {
 	Channel, RootTS string
 	Reactions       []Reaction
+	Replies         int
 }
 type Message map[string]any
 type Reaction struct {
@@ -168,7 +202,32 @@ type CleanupDriver interface {
 	Pace(context.Context) error
 }
 type Link struct{ Label, URL string }
-type Choice struct{ ID, Label string }
+
+// Choice is a selectable option. Glyph, Image and Group are optional display hints
+// (for example an emoji character, a custom image URL and a picker category).
+type Choice struct {
+	ID, Label           string
+	Glyph, Image, Group string
+	Keywords            string
+}
+
+// Check is one line of a connection test result.
+type Check struct {
+	Label, Detail string
+	OK            bool
+	Optional      bool
+}
+
+// ReactionView describes a stored reaction for display.
+type ReactionView struct {
+	Name, Glyph, Image string
+	Count              int
+}
+
+// ReactionRenderer is an optional ContentHooks extension for viewers.
+type ReactionRenderer interface {
+	Reactions(context.Context, Message) ([]ReactionView, error)
+}
 type SetupState map[string]json.RawMessage
 type StepResult struct {
 	OK          bool
@@ -176,12 +235,24 @@ type StepResult struct {
 	Messages    []string
 	Data        json.RawMessage
 	Choices     []Choice
+	// Links and Checks are optional: Prepare may compute links from earlier
+	// steps, and Test/Run may report itemized connection results.
+	Links  []Link
+	Checks []Check
 }
+
+// SetupStep is one wizard page. Run validates a submission. Optional hooks:
+// Prepare runs when the page is shown (dynamic links, choices); Test runs the
+// "Test connection" action without advancing. Skip, when set, labels an explicit
+// fallback action that clears this step's secret fields and then calls Run.
 type SetupStep struct {
 	ID, Title, Kind, Body string
 	Links                 []Link
 	Schema                json.RawMessage
 	Run                   func(context.Context, SetupState, json.RawMessage, Env) (StepResult, error)
+	Prepare               func(context.Context, SetupState, Env) (StepResult, error)
+	Test                  func(context.Context, SetupState, json.RawMessage, Env) (StepResult, error)
+	Skip, SkipNote        string
 }
 
 var registry = struct {
